@@ -1,0 +1,5 @@
+node_modules/
+dist/
+food_finder.db
+.env
+*.db
