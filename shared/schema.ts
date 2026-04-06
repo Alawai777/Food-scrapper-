@@ -2,7 +2,6 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Search history table
 export const searches = sqliteTable("searches", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   city: text("city").notNull(),
@@ -11,6 +10,7 @@ export const searches = sqliteTable("searches", {
   groupSize: integer("group_size").notNull(),
   priceRange: text("price_range").notNull(),
   halal: integer("halal", { mode: "boolean" }).notNull().default(false),
+  openNow: integer("open_now", { mode: "boolean" }).notNull().default(false),
   resultsJson: text("results_json").notNull().default("[]"),
 });
 
@@ -18,49 +18,58 @@ export const insertSearchSchema = createInsertSchema(searches).omit({ id: true, 
 export type InsertSearch = z.infer<typeof insertSearchSchema>;
 export type Search = typeof searches.$inferSelect;
 
-// Types used across the app
-export const METRO_DETROIT_CITIES = [
-  "Dearborn, MI",
-  "Dearborn Heights, MI",
-  "Detroit, MI",
-  "Livonia, MI",
-  "Warren, MI",
-  "Sterling Heights, MI",
-  "Troy, MI",
-  "Southfield, MI",
-  "Ann Arbor, MI",
-  "Westland, MI",
-  "Taylor, MI",
-  "Hamtramck, MI",
-  "Inkster, MI",
-  "Garden City, MI",
-  "Allen Park, MI",
-];
+// Metro Detroit city bounding boxes [south, west, north, east]
+export const CITY_BBOXES: Record<string, [number, number, number, number]> = {
+  "Dearborn, MI":         [42.28, -83.26, 42.36, -83.13],
+  "Dearborn Heights, MI": [42.32, -83.32, 42.40, -83.22],
+  "Detroit, MI":          [42.26, -83.32, 42.46, -82.90],
+  "Livonia, MI":          [42.36, -83.43, 42.44, -83.32],
+  "Warren, MI":           [42.45, -83.12, 42.56, -82.99],
+  "Sterling Heights, MI": [42.52, -83.13, 42.63, -82.97],
+  "Troy, MI":             [42.53, -83.20, 42.63, -83.08],
+  "Southfield, MI":       [42.44, -83.30, 42.53, -83.17],
+  "Ann Arbor, MI":        [42.22, -83.84, 42.34, -83.68],
+  "Westland, MI":         [42.31, -83.44, 42.39, -83.34],
+  "Taylor, MI":           [42.19, -83.30, 42.27, -83.22],
+  "Hamtramck, MI":        [42.38, -83.08, 42.42, -83.04],
+  "Inkster, MI":          [42.27, -83.35, 42.32, -83.30],
+  "Garden City, MI":      [42.32, -83.37, 42.36, -83.33],
+  "Allen Park, MI":       [42.25, -83.23, 42.30, -83.18],
+};
+
+export const METRO_DETROIT_CITIES = Object.keys(CITY_BBOXES);
 
 export const CUISINE_GENRES = [
-  { id: "middle_eastern", label: "Middle Eastern", icon: "🧆" },
-  { id: "american", label: "American", icon: "🍔" },
-  { id: "italian", label: "Italian", icon: "🍝" },
-  { id: "mexican", label: "Mexican", icon: "🌮" },
-  { id: "asian", label: "Asian", icon: "🍜" },
-  { id: "pizza", label: "Pizza", icon: "🍕" },
-  { id: "seafood", label: "Seafood", icon: "🦞" },
-  { id: "mediterranean", label: "Mediterranean", icon: "🥙" },
-  { id: "indian", label: "Indian", icon: "🍛" },
-  { id: "bbq", label: "BBQ", icon: "🍖" },
-  { id: "breakfast", label: "Breakfast", icon: "🍳" },
-  { id: "desserts", label: "Desserts", icon: "🧁" },
+  { id: "any",           label: "Any Food",        icon: "🍽️", osm: "" },
+  { id: "middle_eastern",label: "Middle Eastern",  icon: "🧆", osm: "middle_eastern|arabic|lebanese|turkish|persian|iranian|syrian|iraqi|jordanian|yemeni" },
+  { id: "american",      label: "American",         icon: "🍔", osm: "american|burger|hot_dog|chicken|diner|steak" },
+  { id: "italian",       label: "Italian",          icon: "🍝", osm: "italian|pasta" },
+  { id: "mexican",       label: "Mexican",          icon: "🌮", osm: "mexican|tex-mex|tacos" },
+  { id: "asian",         label: "Asian",            icon: "🍜", osm: "chinese|japanese|korean|thai|vietnamese|sushi|ramen|asian" },
+  { id: "pizza",         label: "Pizza",            icon: "🍕", osm: "pizza" },
+  { id: "seafood",       label: "Seafood",          icon: "🦞", osm: "seafood|fish|fish_and_chips" },
+  { id: "mediterranean", label: "Mediterranean",    icon: "🥙", osm: "mediterranean|greek" },
+  { id: "indian",        label: "Indian",           icon: "🍛", osm: "indian|pakistani" },
+  { id: "bbq",           label: "BBQ",              icon: "🍖", osm: "barbecue|bbq" },
+  { id: "breakfast",     label: "Breakfast",        icon: "🍳", osm: "breakfast|brunch" },
+  { id: "desserts",      label: "Desserts",         icon: "🧁", osm: "ice_cream|dessert|cake|bakery|donut" },
 ];
 
 export const DINING_STYLES = [
-  { id: "restaurants", label: "Dine In", icon: "🍽️", yelpAttr: "restaurants" },
-  { id: "order_food", label: "Pick Up", icon: "🥡", yelpAttr: "order_food" },
-  { id: "food_trucks", label: "Food Truck", icon: "🚚", yelpAttr: "food_trucks" },
+  { id: "restaurants", label: "Dine In",    icon: "🍽️", osm: ["restaurant"] },
+  { id: "order_food",  label: "Pick Up",    icon: "🥡", osm: ["fast_food", "restaurant"] },
+  { id: "food_trucks", label: "Food Truck", icon: "🚚", osm: ["food_truck", "fast_food"] },
 ];
 
 export const PRICE_RANGES = [
-  { id: "1", label: "$", desc: "Under $15" },
-  { id: "2", label: "$$", desc: "$15–$30" },
-  { id: "3", label: "$$$", desc: "$30–$60" },
+  { id: "1", label: "$",    desc: "Under $15" },
+  { id: "2", label: "$$",   desc: "$15–$30" },
+  { id: "3", label: "$$$",  desc: "$30–$60" },
   { id: "4", label: "$$$$", desc: "Over $60" },
+];
+
+export const SORT_OPTIONS = [
+  { id: "name",     label: "Name" },
+  { id: "rating",   label: "Rating" },
+  { id: "distance", label: "Distance" },
 ];

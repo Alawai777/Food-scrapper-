@@ -1,156 +1,126 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Lora:ital,wght@0,600;1,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Bricolage+Grotesque:wght@700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Warm amber/saffron food palette */
-  --background: 32 30% 97%;
-  --foreground: 24 20% 12%;
-  --card: 32 25% 98%;
-  --card-foreground: 24 20% 12%;
-  --popover: 32 25% 98%;
-  --popover-foreground: 24 20% 12%;
-  --primary: 28 85% 42%;
+  /* YartedEats warm saffron + deep olive palette */
+  --background: 38 28% 96%;
+  --foreground: 24 22% 11%;
+  --card: 38 22% 98%;
+  --card-foreground: 24 22% 11%;
+  --popover: 38 22% 98%;
+  --popover-foreground: 24 22% 11%;
+  --primary: 24 88% 40%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 32 20% 92%;
-  --secondary-foreground: 24 20% 20%;
-  --muted: 32 15% 92%;
-  --muted-foreground: 24 10% 48%;
-  --accent: 160 40% 36%;
+  --secondary: 36 18% 91%;
+  --secondary-foreground: 24 18% 22%;
+  --muted: 36 14% 91%;
+  --muted-foreground: 24 8% 46%;
+  --accent: 155 42% 34%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
-  --border: 32 12% 86%;
-  --input: 32 12% 86%;
-  --ring: 28 85% 42%;
+  --border: 36 10% 85%;
+  --input: 36 10% 85%;
+  --ring: 24 88% 40%;
   --radius: 0.75rem;
-
-  /* Halal green accent */
-  --halal: 142 60% 34%;
-  --halal-light: 142 40% 92%;
-  --halal-text: 142 60% 28%;
+  --halal-bg: 142 38% 90%;
+  --halal-text: 142 60% 26%;
+  --halal-border: 142 42% 70%;
+  --veg-bg: 100 38% 90%;
+  --veg-text: 100 55% 25%;
 }
 
 .dark {
-  --background: 24 18% 8%;
-  --foreground: 32 15% 88%;
-  --card: 24 15% 11%;
-  --card-foreground: 32 15% 88%;
-  --popover: 24 15% 11%;
-  --popover-foreground: 32 15% 88%;
-  --primary: 28 80% 56%;
-  --primary-foreground: 24 20% 8%;
-  --secondary: 24 12% 18%;
-  --secondary-foreground: 32 15% 80%;
-  --muted: 24 12% 16%;
-  --muted-foreground: 32 8% 52%;
-  --accent: 160 45% 48%;
+  --background: 24 18% 7%;
+  --foreground: 36 14% 86%;
+  --card: 24 14% 10%;
+  --card-foreground: 36 14% 86%;
+  --popover: 24 14% 10%;
+  --popover-foreground: 36 14% 86%;
+  --primary: 24 82% 55%;
+  --primary-foreground: 24 20% 6%;
+  --secondary: 24 12% 16%;
+  --secondary-foreground: 36 12% 78%;
+  --muted: 24 10% 15%;
+  --muted-foreground: 36 6% 50%;
+  --accent: 155 46% 46%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 62% 50%;
   --destructive-foreground: 0 0% 100%;
-  --border: 24 10% 20%;
-  --input: 24 10% 20%;
-  --ring: 28 80% 56%;
-
-  --halal: 142 55% 46%;
-  --halal-light: 142 20% 18%;
-  --halal-text: 142 55% 60%;
+  --border: 24 10% 19%;
+  --input: 24 10% 19%;
+  --ring: 24 82% 55%;
+  --halal-bg: 142 20% 16%;
+  --halal-text: 142 52% 56%;
+  --halal-border: 142 28% 28%;
+  --veg-bg: 100 18% 16%;
+  --veg-text: 100 48% 56%;
 }
 
-* {
-  border-color: hsl(var(--border));
-  box-sizing: border-box;
-}
-
+* { border-color: hsl(var(--border)); box-sizing: border-box; }
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 9999px; }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 99px; }
 
-/* Halal badge */
-.halal-badge {
-  background-color: hsl(var(--halal-light));
-  color: hsl(var(--halal-text));
-  border: 1px solid hsl(var(--halal) / 0.3);
-}
+/* Brand font */
+.brand-font { font-family: 'Bricolage Grotesque', sans-serif; }
 
-/* Genre chip active */
-.genre-chip.active {
-  background-color: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  border-color: hsl(var(--primary));
+/* Chip variants */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 12px; border: 1.5px solid hsl(var(--border));
+  background: hsl(var(--card)); font-size: 0.8125rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease; white-space: nowrap;
+  color: hsl(var(--foreground));
 }
-.genre-chip {
-  transition: all 0.15s ease;
-}
-.genre-chip:hover:not(.active) {
-  background-color: hsl(var(--secondary));
-  border-color: hsl(var(--primary) / 0.4);
-}
+.chip:hover { border-color: hsl(var(--primary) / 0.5); background: hsl(var(--secondary)); }
+.chip.active-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+.chip.active-accent  { background: hsl(var(--accent));  color: hsl(var(--accent-foreground));  border-color: hsl(var(--accent)); }
+.chip.active-dark    { background: hsl(var(--foreground)); color: hsl(var(--background)); border-color: hsl(var(--foreground)); }
 
-/* Dining style chip */
-.dining-chip.active {
-  background-color: hsl(var(--accent));
-  color: hsl(var(--accent-foreground));
-  border-color: hsl(var(--accent));
+/* Halal toggle */
+.halal-chip.on  {
+  background: hsl(var(--halal-bg)); color: hsl(var(--halal-text));
+  border-color: hsl(var(--halal-border)); border-width: 2px;
 }
-.dining-chip:hover:not(.active) {
-  background-color: hsl(var(--secondary));
-}
+.halal-chip.off { background: hsl(var(--card)); color: hsl(var(--foreground)); border-color: hsl(var(--border)); }
+.halal-chip:hover.off { border-color: hsl(var(--halal-border)); }
 
-/* Price chip */
-.price-chip.active {
-  background-color: hsl(var(--foreground));
-  color: hsl(var(--background));
-}
-.price-chip:hover:not(.active) {
-  background-color: hsl(var(--secondary));
-}
+/* Open now toggle */
+.open-chip.on  { background: hsl(155 40% 90%); color: hsl(155 55% 25%); border-color: hsl(155 40% 60%); border-width:2px; }
+.dark .open-chip.on { background: hsl(155 20% 16%); color: hsl(155 50% 55%); border-color: hsl(155 28% 28%); }
 
-/* Card hover */
-.result-card {
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-.result-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 32px hsl(var(--foreground) / 0.1);
-}
+/* Result card */
+.result-card { transition: transform 0.16s ease, box-shadow 0.16s ease; }
+.result-card:hover { transform: translateY(-3px); box-shadow: 0 14px 36px hsl(var(--foreground) / 0.08); }
 
-/* Rating stars color */
-.star-fill { color: #f59e0b; }
+/* Stars */
+.star-on  { color: #f59e0b; }
+.star-off { color: hsl(var(--border)); }
 
-/* Skeleton pulse */
-@keyframes skeleton-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.skeleton {
-  animation: skeleton-pulse 1.5s ease-in-out infinite;
-  background-color: hsl(var(--muted));
-  border-radius: var(--radius);
-}
+/* Skeleton */
+@keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:.45} }
+.skeleton { animation: shimmer 1.6s ease-in-out infinite; background: hsl(var(--muted)); border-radius: var(--radius); }
 
-/* Hero gradient */
-.hero-gradient {
-  background: linear-gradient(135deg, hsl(28 85% 42%) 0%, hsl(16 90% 38%) 100%);
-}
+/* Hero */
+.hero-bg { background: linear-gradient(140deg, hsl(24 88% 38%) 0%, hsl(14 92% 34%) 60%, hsl(24 70% 28%) 100%); }
 
-/* Open badge */
-.open-badge { color: hsl(142 60% 36%); }
-.closed-badge { color: hsl(0 65% 48%); }
-
-/* Demo banner */
-.demo-banner {
-  background: linear-gradient(90deg, hsl(var(--primary) / 0.12), hsl(var(--accent) / 0.12));
-  border: 1px solid hsl(var(--primary) / 0.25);
+/* OSM badge */
+.osm-badge {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 600;
+  background: hsl(210 40% 92%); color: hsl(210 50% 35%); padding: 2px 7px; border-radius: 99px;
 }
+.dark .osm-badge { background: hsl(210 20% 18%); color: hsl(210 50% 65%); }
+
+/* Tooltip */
+.label-xs { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
