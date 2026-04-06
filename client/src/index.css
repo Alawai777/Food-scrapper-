@@ -1,0 +1,156 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Lora:ital,wght@0,600;1,500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Warm amber/saffron food palette */
+  --background: 32 30% 97%;
+  --foreground: 24 20% 12%;
+  --card: 32 25% 98%;
+  --card-foreground: 24 20% 12%;
+  --popover: 32 25% 98%;
+  --popover-foreground: 24 20% 12%;
+  --primary: 28 85% 42%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 32 20% 92%;
+  --secondary-foreground: 24 20% 20%;
+  --muted: 32 15% 92%;
+  --muted-foreground: 24 10% 48%;
+  --accent: 160 40% 36%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 32 12% 86%;
+  --input: 32 12% 86%;
+  --ring: 28 85% 42%;
+  --radius: 0.75rem;
+
+  /* Halal green accent */
+  --halal: 142 60% 34%;
+  --halal-light: 142 40% 92%;
+  --halal-text: 142 60% 28%;
+}
+
+.dark {
+  --background: 24 18% 8%;
+  --foreground: 32 15% 88%;
+  --card: 24 15% 11%;
+  --card-foreground: 32 15% 88%;
+  --popover: 24 15% 11%;
+  --popover-foreground: 32 15% 88%;
+  --primary: 28 80% 56%;
+  --primary-foreground: 24 20% 8%;
+  --secondary: 24 12% 18%;
+  --secondary-foreground: 32 15% 80%;
+  --muted: 24 12% 16%;
+  --muted-foreground: 32 8% 52%;
+  --accent: 160 45% 48%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 62% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 24 10% 20%;
+  --input: 24 10% 20%;
+  --ring: 28 80% 56%;
+
+  --halal: 142 55% 46%;
+  --halal-light: 142 20% 18%;
+  --halal-text: 142 55% 60%;
+}
+
+* {
+  border-color: hsl(var(--border));
+  box-sizing: border-box;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 9999px; }
+
+/* Halal badge */
+.halal-badge {
+  background-color: hsl(var(--halal-light));
+  color: hsl(var(--halal-text));
+  border: 1px solid hsl(var(--halal) / 0.3);
+}
+
+/* Genre chip active */
+.genre-chip.active {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: hsl(var(--primary));
+}
+.genre-chip {
+  transition: all 0.15s ease;
+}
+.genre-chip:hover:not(.active) {
+  background-color: hsl(var(--secondary));
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+/* Dining style chip */
+.dining-chip.active {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  border-color: hsl(var(--accent));
+}
+.dining-chip:hover:not(.active) {
+  background-color: hsl(var(--secondary));
+}
+
+/* Price chip */
+.price-chip.active {
+  background-color: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+.price-chip:hover:not(.active) {
+  background-color: hsl(var(--secondary));
+}
+
+/* Card hover */
+.result-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.result-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px hsl(var(--foreground) / 0.1);
+}
+
+/* Rating stars color */
+.star-fill { color: #f59e0b; }
+
+/* Skeleton pulse */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.skeleton {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  background-color: hsl(var(--muted));
+  border-radius: var(--radius);
+}
+
+/* Hero gradient */
+.hero-gradient {
+  background: linear-gradient(135deg, hsl(28 85% 42%) 0%, hsl(16 90% 38%) 100%);
+}
+
+/* Open badge */
+.open-badge { color: hsl(142 60% 36%); }
+.closed-badge { color: hsl(0 65% 48%); }
+
+/* Demo banner */
+.demo-banner {
+  background: linear-gradient(90deg, hsl(var(--primary) / 0.12), hsl(var(--accent) / 0.12));
+  border: 1px solid hsl(var(--primary) / 0.25);
+}
