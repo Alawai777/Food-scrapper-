@@ -41,25 +41,25 @@ export const CITY_BBOXES: Record<string, [number, number, number, number]> = {
 export const METRO_DETROIT_CITIES = Object.keys(CITY_BBOXES);
 
 export const CUISINE_GENRES = [
-  { id: "any",            label: "Any Food",       icon: "🍽️", osm: "",                                                                                       yelp: "" },
-  { id: "middle_eastern", label: "Middle Eastern",  icon: "🧆", osm: "middle_eastern|arabic|lebanese|turkish|persian|iranian|syrian|iraqi|jordanian|yemeni",   yelp: "mideastern,arabic,lebanese,turkish,persian" },
-  { id: "american",       label: "American",        icon: "🍔", osm: "american|burger|hot_dog|chicken|diner|steak",                                           yelp: "newamerican,tradamerican,burgers" },
-  { id: "italian",        label: "Italian",         icon: "🍝", osm: "italian|pasta",                                                                          yelp: "italian" },
-  { id: "mexican",        label: "Mexican",         icon: "🌮", osm: "mexican|tex-mex|tacos",                                                                  yelp: "mexican,tex-mex" },
-  { id: "asian",          label: "Asian",           icon: "🍜", osm: "chinese|japanese|korean|thai|vietnamese|sushi|ramen|asian",                               yelp: "asianfusion,chinese,japanese,korean,thai,vietnamese" },
-  { id: "pizza",          label: "Pizza",           icon: "🍕", osm: "pizza",                                                                                  yelp: "pizza" },
-  { id: "seafood",        label: "Seafood",         icon: "🦞", osm: "seafood|fish|fish_and_chips",                                                            yelp: "seafood" },
-  { id: "mediterranean",  label: "Mediterranean",   icon: "🥙", osm: "mediterranean|greek",                                                                    yelp: "mediterranean,greek" },
-  { id: "indian",         label: "Indian",          icon: "🍛", osm: "indian|pakistani",                                                                       yelp: "indpak" },
-  { id: "bbq",            label: "BBQ",             icon: "🍖", osm: "barbecue|bbq",                                                                           yelp: "bbq" },
-  { id: "breakfast",      label: "Breakfast",       icon: "🍳", osm: "breakfast|brunch",                                                                        yelp: "breakfast_brunch" },
-  { id: "desserts",       label: "Desserts",        icon: "🧁", osm: "ice_cream|dessert|cake|bakery|donut",                                                    yelp: "desserts,icecream,bakeries" },
+  { id: "any",            label: "Any Food",       icon: "🍽️", osm: "",                                                                                       yelp: "",                                              google: "" },
+  { id: "middle_eastern", label: "Middle Eastern",  icon: "🧆", osm: "middle_eastern|arabic|lebanese|turkish|persian|iranian|syrian|iraqi|jordanian|yemeni",   yelp: "mideastern,arabic,lebanese,turkish,persian",    google: "middle eastern restaurant" },
+  { id: "american",       label: "American",        icon: "🍔", osm: "american|burger|hot_dog|chicken|diner|steak",                                           yelp: "newamerican,tradamerican,burgers",              google: "american restaurant" },
+  { id: "italian",        label: "Italian",         icon: "🍝", osm: "italian|pasta",                                                                          yelp: "italian",                                       google: "italian restaurant" },
+  { id: "mexican",        label: "Mexican",         icon: "🌮", osm: "mexican|tex-mex|tacos",                                                                  yelp: "mexican,tex-mex",                               google: "mexican restaurant" },
+  { id: "asian",          label: "Asian",           icon: "🍜", osm: "chinese|japanese|korean|thai|vietnamese|sushi|ramen|asian",                               yelp: "asianfusion,chinese,japanese,korean,thai,vietnamese", google: "asian restaurant" },
+  { id: "pizza",          label: "Pizza",           icon: "🍕", osm: "pizza",                                                                                  yelp: "pizza",                                         google: "pizza" },
+  { id: "seafood",        label: "Seafood",         icon: "🦞", osm: "seafood|fish|fish_and_chips",                                                            yelp: "seafood",                                       google: "seafood restaurant" },
+  { id: "mediterranean",  label: "Mediterranean",   icon: "🥙", osm: "mediterranean|greek",                                                                    yelp: "mediterranean,greek",                           google: "mediterranean restaurant" },
+  { id: "indian",         label: "Indian",          icon: "🍛", osm: "indian|pakistani",                                                                       yelp: "indpak",                                        google: "indian restaurant" },
+  { id: "bbq",            label: "BBQ",             icon: "🍖", osm: "barbecue|bbq",                                                                           yelp: "bbq",                                           google: "bbq" },
+  { id: "breakfast",      label: "Breakfast",       icon: "🍳", osm: "breakfast|brunch",                                                                        yelp: "breakfast_brunch",                              google: "breakfast restaurant" },
+  { id: "desserts",       label: "Desserts",        icon: "🧁", osm: "ice_cream|dessert|cake|bakery|donut",                                                    yelp: "desserts,icecream,bakeries",                    google: "dessert" },
 ];
 
 export const DINING_STYLES = [
-  { id: "restaurants", label: "Dine In",    icon: "🍽️", osm: ["restaurant"],                 yelp: "restaurants" },
-  { id: "order_food",  label: "Pick Up",    icon: "🥡", osm: ["fast_food", "restaurant"],    yelp: "food" },
-  { id: "food_trucks", label: "Food Truck", icon: "🚚", osm: ["food_truck", "fast_food"],    yelp: "foodtrucks" },
+  { id: "restaurants", label: "Dine In",    icon: "🍽️", osm: ["restaurant"],                 yelp: "restaurants",  google: "restaurant" },
+  { id: "order_food",  label: "Pick Up",    icon: "🥡", osm: ["fast_food", "restaurant"],    yelp: "food",         google: "restaurant" },
+  { id: "food_trucks", label: "Food Truck", icon: "🚚", osm: ["food_truck", "fast_food"],    yelp: "foodtrucks",   google: "restaurant" },
 ];
 
 export const PRICE_RANGES = [

@@ -6,6 +6,7 @@ import { CITY_BBOXES, CUISINE_GENRES, DINING_STYLES } from "@shared/schema";
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const YELP_BASE   = "https://api.yelp.com/v3";
+const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // OVERPASS (OpenStreetMap) — free, no API key
@@ -255,23 +256,186 @@ async function searchYelp(params: any, apiKey: string) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// GOOGLE MAPS PLACES API (New) — requires API key, rich data
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const GOOGLE_FIELD_MASK = [
+  "places.id",
+  "places.displayName",
+  "places.formattedAddress",
+  "places.location",
+  "places.rating",
+  "places.userRatingCount",
+  "places.priceLevel",
+  "places.currentOpeningHours",
+  "places.nationalPhoneNumber",
+  "places.websiteUri",
+  "places.googleMapsUri",
+  "places.photos",
+  "places.types",
+  "places.primaryTypeDisplayName",
+  "places.takeout",
+  "places.delivery",
+  "places.dineIn",
+  "places.servesVegetarianFood",
+  "places.goodForGroups",
+].join(",");
+
+const GOOGLE_PRICE_MAP: Record<string, string> = {
+  PRICE_LEVEL_FREE: "",
+  PRICE_LEVEL_INEXPENSIVE: "$",
+  PRICE_LEVEL_MODERATE: "$$",
+  PRICE_LEVEL_EXPENSIVE: "$$$",
+  PRICE_LEVEL_VERY_EXPENSIVE: "$$$$",
+};
+
+async function searchGoogle(params: any, apiKey: string) {
+  const { city, genre, diningStyle, halal, priceRange, openNow, sortBy, userLat, userLon } = params;
+
+  const genreConfig  = CUISINE_GENRES.find(g => g.id === genre);
+  const bbox = CITY_BBOXES[city];
+  if (!bbox) throw new Error("Unknown city");
+
+  const centerLat = (bbox[0] + bbox[2]) / 2;
+  const centerLon = (bbox[1] + bbox[3]) / 2;
+
+  // Build the text query
+  const cuisineText = genreConfig?.google || "";
+  const halalText = halal ? "halal" : "";
+  const queryParts = [halalText, cuisineText, "in", city].filter(Boolean);
+  const textQuery = queryParts.join(" ") || `restaurants in ${city}`;
+
+  // Build request body for Text Search (New)
+  const body: any = {
+    textQuery,
+    maxResultCount: 20,
+    locationBias: {
+      circle: {
+        center: { latitude: centerLat, longitude: centerLon },
+        radius: 8000, // ~5 miles
+      },
+    },
+  };
+
+  // Price filter
+  if (priceRange && priceRange !== "all") {
+    const levels = priceRange.split(",").map((p: string) => {
+      const map: Record<string, string> = {
+        "1": "PRICE_LEVEL_INEXPENSIVE",
+        "2": "PRICE_LEVEL_MODERATE",
+        "3": "PRICE_LEVEL_EXPENSIVE",
+        "4": "PRICE_LEVEL_VERY_EXPENSIVE",
+      };
+      return map[p];
+    }).filter(Boolean);
+    if (levels.length) body.priceLevels = levels;
+  }
+
+  // Open now
+  if (openNow) body.openNow = true;
+
+  const response = await axios.post(
+    `${GOOGLE_PLACES_BASE}/places:searchText`,
+    body,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": GOOGLE_FIELD_MASK,
+      },
+      timeout: 15000,
+    }
+  );
+
+  const places = response.data.places || [];
+  const refLat = userLat ? Number(userLat) : centerLat;
+  const refLon = userLon ? Number(userLon) : centerLon;
+
+  return places.map((p: any) => {
+    const lat = p.location?.latitude || 0;
+    const lon = p.location?.longitude || 0;
+
+    // Distance
+    let distance = "";
+    if (refLat && refLon && lat && lon) {
+      const R = 3958.8;
+      const dLat = ((lat - refLat) * Math.PI) / 180;
+      const dLon = ((lon - refLon) * Math.PI) / 180;
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos((refLat * Math.PI) / 180) * Math.cos((lat * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+      distance = (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1) + " mi";
+    }
+
+    // Photo URL — Google Places photo reference
+    let imageUrl = "";
+    if (p.photos?.length > 0) {
+      const photoName = p.photos[0].name; // e.g. "places/xxx/photos/yyy"
+      imageUrl = `${GOOGLE_PLACES_BASE}/${photoName}/media?key=${apiKey}&maxWidthPx=600&maxHeightPx=400`;
+    }
+
+    // Detect halal from name or types
+    const nameStr = p.displayName?.text || "";
+    const typesStr = (p.types || []).join(" ");
+    const isHalal = halal || nameStr.toLowerCase().includes("halal") || typesStr.includes("halal");
+
+    // Opening hours
+    let openingHours = "";
+    if (p.currentOpeningHours?.weekdayDescriptions) {
+      const today = new Date().getDay();
+      // Google returns Mon=0 index, JS getDay Sun=0
+      const gIdx = today === 0 ? 6 : today - 1;
+      openingHours = p.currentOpeningHours.weekdayDescriptions[gIdx] || "";
+    }
+
+    const mapsLink = p.googleMapsUri || (lat && lon
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nameStr)}+${lat},${lon}`
+      : "");
+
+    return {
+      id: p.id || String(Math.random()),
+      name: nameStr,
+      cuisine: p.primaryTypeDisplayName?.text || (p.types || []).slice(0, 3).join(", ").replace(/_/g, " "),
+      amenity: "",
+      address: p.formattedAddress || "",
+      phone: p.nationalPhoneNumber || "",
+      website: p.websiteUri || "",
+      openingHours,
+      isOpen: p.currentOpeningHours?.openNow ?? null,
+      isHalal,
+      isVegetarian: p.servesVegetarianFood || false,
+      isVegan: false,
+      lat, lon, distance,
+      imageUrl,
+      mapsLink,
+      source: "google" as const,
+      rating: p.rating || 0,
+      reviewCount: p.userRatingCount || 0,
+      price: GOOGLE_PRICE_MAP[p.priceLevel] || "",
+      yelpUrl: "",
+      googleMapsUrl: p.googleMapsUri || "",
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ROUTES
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function registerRoutes(httpServer: Server, app: Express) {
 
-  // Main search — supports both OSM and Yelp
+  // Main search — supports OSM, Yelp, and Google
   app.post("/api/search", async (req, res) => {
     const { city, genre, diningStyle, groupSize, priceRange, halal, openNow,
-            sortBy, userLat, userLon, dataSource, yelpApiKey } = req.body;
+            sortBy, userLat, userLon, dataSource, yelpApiKey, googleApiKey } = req.body;
 
     if (!city || !genre || !diningStyle) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
     const source = dataSource || "osm";
-    // Resolve Yelp key: request body > server env var
-    const resolvedYelpKey = yelpApiKey || process.env.YELP_API_KEY || "";
+    // Resolve keys: request body > server env var
+    const resolvedYelpKey   = yelpApiKey   || process.env.YELP_API_KEY   || "";
+    const resolvedGoogleKey = googleApiKey || process.env.GOOGLE_MAPS_API_KEY || "";
 
     try {
       let results: any[];
@@ -284,6 +448,14 @@ export function registerRoutes(httpServer: Server, app: Express) {
           });
         }
         results = await searchYelp(req.body, resolvedYelpKey);
+      } else if (source === "google") {
+        if (!resolvedGoogleKey) {
+          return res.status(400).json({
+            error: "Google Maps API key is required. Paste it in Settings or set GOOGLE_MAPS_API_KEY env variable.",
+            results: [],
+          });
+        }
+        results = await searchGoogle(req.body, resolvedGoogleKey);
       } else {
         results = await searchOverpass(req.body);
       }
@@ -303,20 +475,26 @@ export function registerRoutes(httpServer: Server, app: Express) {
     } catch (err: any) {
       console.error(`${source} error:`, err?.response?.data || err.message);
 
-      // If Yelp fails, give a clear message
+      // Source-specific error handling
       if (source === "yelp" && err?.response?.status === 401) {
         return res.status(401).json({ error: "Invalid Yelp API key. Check your key and try again.", results: [] });
       }
       if (source === "yelp" && err?.response?.status === 429) {
         return res.status(429).json({ error: "Yelp rate limit reached. Try again later or switch to OpenStreetMap.", results: [] });
       }
+      if (source === "google" && err?.response?.status === 403) {
+        return res.status(403).json({ error: "Google API key invalid or Places API not enabled. Check your key in Google Cloud Console.", results: [] });
+      }
+      if (source === "google" && err?.response?.status === 429) {
+        return res.status(429).json({ error: "Google API rate limit reached. Try again later.", results: [] });
+      }
 
-      res.status(500).json({
-        error: source === "yelp"
-          ? "Yelp API error. Check your key or switch to OpenStreetMap."
-          : "Could not fetch data from OpenStreetMap. Try again in a moment.",
-        results: [],
-      });
+      const errorMessages: Record<string, string> = {
+        yelp: "Yelp API error. Check your key or switch to OpenStreetMap.",
+        google: "Google Places API error. Check your key or switch to OpenStreetMap.",
+        osm: "Could not fetch data from OpenStreetMap. Try again in a moment.",
+      };
+      res.status(500).json({ error: errorMessages[source] || "Search error.", results: [] });
     }
   });
 
@@ -334,6 +512,34 @@ export function registerRoutes(httpServer: Server, app: Express) {
       res.json({ valid: true });
     } catch (err: any) {
       res.json({ valid: false, error: err?.response?.status === 401 ? "Invalid API key" : "Connection error" });
+    }
+  });
+
+  // Validate Google Maps API key
+  app.post("/api/validate-google-key", async (req, res) => {
+    const { googleApiKey } = req.body;
+    if (!googleApiKey) return res.json({ valid: false, error: "No key provided" });
+
+    try {
+      await axios.post(
+        `${GOOGLE_PLACES_BASE}/places:searchText`,
+        { textQuery: "restaurant in Dearborn MI", maxResultCount: 1 },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": googleApiKey,
+            "X-Goog-FieldMask": "places.id",
+          },
+          timeout: 8000,
+        }
+      );
+      res.json({ valid: true });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const msg = status === 403 ? "API key invalid or Places API (New) not enabled" :
+                  status === 400 ? "Places API not enabled for this key" :
+                  "Connection error";
+      res.json({ valid: false, error: msg });
     }
   });
 

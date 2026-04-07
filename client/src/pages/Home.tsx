@@ -37,11 +37,12 @@ interface Restaurant {
   distance: string;
   mapsLink: string;
   imageUrl: string;
-  source: "osm" | "yelp";
+  source: "osm" | "yelp" | "google";
   rating: number;
   reviewCount: number;
   price: string;
   yelpUrl: string;
+  googleMapsUrl?: string;
 }
 
 // ── Star rating ───────────────────────────────────────────────────────────────
@@ -82,12 +83,15 @@ function OpenBadge({ isOpen }: { isOpen: boolean | null }) {
 }
 function SourceBadge({ source }: { source: string }) {
   if (source === "yelp") return <span className="yelp-badge">Yelp</span>;
+  if (source === "google") return <span className="google-badge">Google</span>;
   return <span className="osm-badge">OSM</span>;
 }
 
 // ── Restaurant Card ───────────────────────────────────────────────────────────
 function RestaurantCard({ r }: { r: Restaurant }) {
   const isYelp = r.source === "yelp";
+  const isGoogle = r.source === "google";
+  const hasRichData = isYelp || isGoogle;
   const amenityLabel: Record<string, string> = {
     restaurant: "🍽️ Dine In", fast_food: "🥡 Pick Up",
     food_truck: "🚚 Food Truck", cafe: "☕ Café",
@@ -97,7 +101,7 @@ function RestaurantCard({ r }: { r: Restaurant }) {
     <div className="result-card bg-card border border-border rounded-2xl overflow-hidden" data-testid={`card-restaurant-${r.id}`}>
       {/* Image / Map header */}
       <div className="h-44 bg-muted relative overflow-hidden flex items-center justify-center">
-        {isYelp && r.imageUrl ? (
+        {hasRichData && r.imageUrl ? (
           <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" loading="lazy" />
         ) : r.lat && r.lon ? (
           <img
@@ -132,8 +136,8 @@ function RestaurantCard({ r }: { r: Restaurant }) {
           {r.cuisine && <p className="text-muted-foreground text-xs mt-0.5 capitalize line-clamp-1">{r.cuisine}</p>}
         </div>
 
-        {/* Rating — Yelp only */}
-        {isYelp && r.rating > 0 && (
+        {/* Rating — Yelp & Google */}
+        {hasRichData && r.rating > 0 && (
           <div className="flex items-center gap-2">
             <StarRating rating={r.rating} />
             <span className="text-sm font-semibold text-foreground">{r.rating.toFixed(1)}</span>
@@ -187,6 +191,12 @@ function RestaurantCard({ r }: { r: Restaurant }) {
               <ExternalLink className="w-3 h-3" /> Yelp
             </a>
           )}
+          {isGoogle && r.googleMapsUrl && (
+            <a href={r.googleMapsUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: "#4285f4" }}>
+              <ExternalLink className="w-3 h-3" /> Google
+            </a>
+          )}
           <span className="ml-auto"><SourceBadge source={r.source} /></span>
         </div>
       </div>
@@ -211,43 +221,114 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
   return <p className="label-xs mb-2">{children}</p>;
 }
 
-// ── Settings Panel ────────────────────────────────────────────────────────────
-function SettingsPanel({
-  open, onClose, yelpKey, setYelpKey,
+// ── Key Input Section ──────────────────────────────────────────────────────────
+function ApiKeyInput({
+  label, helpText, helpUrl, helpLinkText, placeholder,
+  value, onChange, onTest, testing, status, testId,
 }: {
-  open: boolean; onClose: () => void; yelpKey: string; setYelpKey: (k: string) => void;
+  label: string; helpText: string; helpUrl: string; helpLinkText: string;
+  placeholder: string; value: string; onChange: (v: string) => void;
+  onTest: () => void; testing: boolean; status: "idle" | "valid" | "invalid";
+  testId: string;
 }) {
   const [showKey, setShowKey] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [keyStatus, setKeyStatus] = useState<"idle" | "valid" | "invalid">("idle");
+  return (
+    <div className="space-y-3">
+      <p className="label-xs">{label}</p>
+      <p className="text-xs text-muted-foreground -mt-1">
+        Get a free key at{" "}
+        <a href={helpUrl} target="_blank" rel="noopener noreferrer"
+          className="text-primary hover:underline font-medium">{helpLinkText}</a>.
+        {" "}{helpText}
+      </p>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Input
+            type={showKey ? "text" : "password"}
+            placeholder={placeholder}
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className="pr-9 bg-background font-mono text-xs"
+            data-testid={testId}
+          />
+          <button onClick={() => setShowKey(!showKey)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+        <Button size="sm" variant="outline" onClick={onTest} disabled={testing || !value.trim()}
+          data-testid={`${testId}-test`} className="shrink-0">
+          {testing ? "Testing…" : "Test"}
+        </Button>
+      </div>
+      {status === "valid" && (
+        <p className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
+          <CheckCircle2 className="w-3.5 h-3.5" /> Key is valid
+        </p>
+      )}
+      {status === "invalid" && (
+        <p className="text-xs text-destructive font-semibold flex items-center gap-1">
+          <XCircle className="w-3.5 h-3.5" /> Invalid key — check and try again
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Settings Panel ────────────────────────────────────────────────────────────
+function SettingsPanel({
+  open, onClose, yelpKey, setYelpKey, googleKey, setGoogleKey,
+}: {
+  open: boolean; onClose: () => void;
+  yelpKey: string; setYelpKey: (k: string) => void;
+  googleKey: string; setGoogleKey: (k: string) => void;
+}) {
+  const [yelpTesting, setYelpTesting] = useState(false);
+  const [yelpStatus, setYelpStatus] = useState<"idle" | "valid" | "invalid">("idle");
+  const [googleTesting, setGoogleTesting] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const { toast } = useToast();
 
-  const testKey = async () => {
+  const testYelpKey = async () => {
     if (!yelpKey.trim()) return;
-    setTesting(true);
-    setKeyStatus("idle");
+    setYelpTesting(true); setYelpStatus("idle");
     try {
       const res = await apiRequest("POST", "/api/validate-yelp-key", { yelpApiKey: yelpKey.trim() });
       const data = await res.json();
       if (data.valid) {
-        setKeyStatus("valid");
-        toast({ title: "Yelp API key is valid", description: "You can now search with Yelp data." });
+        setYelpStatus("valid");
+        toast({ title: "Yelp key is valid", description: "You can now search with Yelp data." });
       } else {
-        setKeyStatus("invalid");
-        toast({ title: "Invalid key", description: data.error || "Check your Yelp API key.", variant: "destructive" });
+        setYelpStatus("invalid");
+        toast({ title: "Invalid Yelp key", description: data.error || "Check your key.", variant: "destructive" });
       }
-    } catch {
-      setKeyStatus("invalid");
-    }
-    setTesting(false);
+    } catch { setYelpStatus("invalid"); }
+    setYelpTesting(false);
+  };
+
+  const testGoogleKey = async () => {
+    if (!googleKey.trim()) return;
+    setGoogleTesting(true); setGoogleStatus("idle");
+    try {
+      const res = await apiRequest("POST", "/api/validate-google-key", { googleApiKey: googleKey.trim() });
+      const data = await res.json();
+      if (data.valid) {
+        setGoogleStatus("valid");
+        toast({ title: "Google key is valid", description: "You can now search with Google Maps data." });
+      } else {
+        setGoogleStatus("invalid");
+        toast({ title: "Invalid Google key", description: data.error || "Check your key.", variant: "destructive" });
+      }
+    } catch { setGoogleStatus("invalid"); }
+    setGoogleTesting(false);
   };
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-5"
+      <div className="relative bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-5 max-h-[80vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-foreground text-base flex items-center gap-2">
@@ -258,50 +339,41 @@ function SettingsPanel({
           </button>
         </div>
 
-        {/* Data source info */}
-        <div className="space-y-3">
-          <p className="label-xs">Yelp Fusion API Key</p>
-          <p className="text-xs text-muted-foreground -mt-1">
-            Get a free key at{" "}
-            <a href="https://www.yelp.com/developers/v3/manage_app" target="_blank" rel="noopener noreferrer"
-              className="text-primary hover:underline font-medium">yelp.com/developers</a>.
-            Adds photos, ratings, reviews, and price to results.
-          </p>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Input
-                type={showKey ? "text" : "password"}
-                placeholder="Paste your Yelp API key…"
-                value={yelpKey}
-                onChange={e => { setYelpKey(e.target.value); setKeyStatus("idle"); }}
-                className="pr-9 bg-background font-mono text-xs"
-                data-testid="input-yelp-key"
-              />
-              <button onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-            <Button size="sm" variant="outline" onClick={testKey} disabled={testing || !yelpKey.trim()}
-              data-testid="button-test-key" className="shrink-0">
-              {testing ? "Testing…" : "Test"}
-            </Button>
-          </div>
-          {keyStatus === "valid" && (
-            <p className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Key is valid
-            </p>
-          )}
-          {keyStatus === "invalid" && (
-            <p className="text-xs text-destructive font-semibold flex items-center gap-1">
-              <XCircle className="w-3.5 h-3.5" /> Invalid key — check and try again
-            </p>
-          )}
-        </div>
+        {/* Google Maps key */}
+        <ApiKeyInput
+          label="Google Maps API Key"
+          helpText="Adds photos, ratings, reviews, hours, and price. $200/mo free credit."
+          helpUrl="https://console.cloud.google.com/apis/credentials"
+          helpLinkText="Google Cloud Console"
+          placeholder="Paste your Google Maps API key…"
+          value={googleKey}
+          onChange={v => { setGoogleKey(v); setGoogleStatus("idle"); }}
+          onTest={testGoogleKey}
+          testing={googleTesting}
+          status={googleStatus}
+          testId="input-google-key"
+        />
+
+        <div className="border-t border-border" />
+
+        {/* Yelp key */}
+        <ApiKeyInput
+          label="Yelp Fusion API Key"
+          helpText="Adds photos, ratings, reviews, and price to results."
+          helpUrl="https://www.yelp.com/developers/v3/manage_app"
+          helpLinkText="yelp.com/developers"
+          placeholder="Paste your Yelp API key…"
+          value={yelpKey}
+          onChange={v => { setYelpKey(v); setYelpStatus("idle"); }}
+          onTest={testYelpKey}
+          testing={yelpTesting}
+          status={yelpStatus}
+          testId="input-yelp-key"
+        />
 
         <div className="pt-2 border-t border-border">
           <p className="text-xs text-muted-foreground">
-            Without a Yelp key, YartedEats uses <strong>OpenStreetMap</strong> (free, no key needed).
+            Without API keys, YartedEats uses <strong>OpenStreetMap</strong> (free, no key needed).
             OSM has addresses and hours, but no photos or star ratings.
           </p>
         </div>
@@ -330,8 +402,9 @@ export default function Home() {
   const [locating, setLocating]     = useState(false);
 
   // Data source
-  const [dataSource, setDataSource] = useState<"osm" | "yelp">("osm");
+  const [dataSource, setDataSource] = useState<"osm" | "yelp" | "google">("osm");
   const [yelpKey, setYelpKey]       = useState("");
+  const [googleKey, setGoogleKey]   = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
   // Results
@@ -362,6 +435,7 @@ export default function Home() {
         halal, openNow, sortBy, userLat, userLon,
         dataSource,
         yelpApiKey: dataSource === "yelp" ? yelpKey.trim() : undefined,
+        googleApiKey: dataSource === "google" ? googleKey.trim() : undefined,
       });
       return res.json();
     },
@@ -385,7 +459,8 @@ export default function Home() {
 
       {/* Settings modal */}
       <SettingsPanel open={showSettings} onClose={() => setShowSettings(false)}
-        yelpKey={yelpKey} setYelpKey={setYelpKey} />
+        yelpKey={yelpKey} setYelpKey={setYelpKey}
+        googleKey={googleKey} setGoogleKey={setGoogleKey} />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-40">
@@ -414,7 +489,7 @@ export default function Home() {
             )}
             <button onClick={() => setShowSettings(true)} data-testid="button-settings"
               className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              title="Settings — Yelp API Key">
+              title="Settings — API Keys">
               <Settings className="w-4 h-4" />
             </button>
             <span className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
@@ -435,7 +510,7 @@ export default function Home() {
             Find Your Next Meal<br />in Metro Detroit
           </h1>
           <p className="text-white/75 text-sm">
-            Dine In · Pick Up · Food Trucks · Halal · <strong>OpenStreetMap</strong> or <strong>Yelp API</strong>
+            Dine In · Pick Up · Food Trucks · Halal · <strong>OpenStreetMap</strong> · <strong>Yelp</strong> · <strong>Google Maps</strong>
           </p>
         </div>
       </div>
@@ -462,6 +537,17 @@ export default function Home() {
                   className={`chip ${dataSource === "yelp" ? "active-yelp" : ""}`}>
                   <Zap className="w-3.5 h-3.5" /> Yelp
                   {yelpKey.trim()
+                    ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
+                    : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
+                  }
+                </button>
+                <button data-testid="chip-source-google" onClick={() => {
+                  if (!googleKey.trim()) { setShowSettings(true); return; }
+                  setDataSource("google");
+                }}
+                  className={`chip ${dataSource === "google" ? "active-google" : ""}`}>
+                  <MapPin className="w-3.5 h-3.5" /> Google Maps
+                  {googleKey.trim()
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
                     : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
                   }
@@ -575,7 +661,7 @@ export default function Home() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Searching {dataSource === "yelp" ? "Yelp" : "OpenStreetMap"}…
+                  Searching {dataSource === "google" ? "Google Maps" : dataSource === "yelp" ? "Yelp" : "OpenStreetMap"}…
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
@@ -583,7 +669,7 @@ export default function Home() {
                   Find {selectedDining?.icon} {selectedDining?.label} · {selectedGenre?.icon} {selectedGenre?.label}
                   {halal && " · ☪️ Halal"}
                   {openNow && " · Open Now"}
-                  <span className="opacity-60 ml-1 text-xs">via {dataSource === "yelp" ? "Yelp" : "OSM"}</span>
+                  <span className="opacity-60 ml-1 text-xs">via {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : "OSM"}</span>
                 </span>
               )}
             </Button>
@@ -625,8 +711,8 @@ export default function Home() {
                 {openNow && <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2.5 py-1 rounded-full font-semibold">🟢 Open Now</span>}
                 <span className="bg-secondary text-foreground px-2.5 py-1 rounded-full font-semibold">{selectedDining?.icon} {selectedDining?.label}</span>
                 <span className="bg-secondary text-foreground px-2.5 py-1 rounded-full font-semibold">{selectedGenre?.icon} {selectedGenre?.label}</span>
-                <span className={`px-2.5 py-1 rounded-full font-semibold ${dataSource === "yelp" ? "yelp-badge" : "osm-badge"}`}>
-                  {dataSource === "yelp" ? "Yelp" : "OSM"}
+                <span className={`px-2.5 py-1 rounded-full font-semibold ${dataSource === "google" ? "google-badge" : dataSource === "yelp" ? "yelp-badge" : "osm-badge"}`}>
+                  {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : "OSM"}
                 </span>
               </div>
             </div>
@@ -643,8 +729,8 @@ export default function Home() {
             <p className="font-semibold text-foreground">No results found</p>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
               {dataSource === "yelp"
-                ? "Try a different genre, city, or switch to OpenStreetMap."
-                : 'OSM data varies by area. Try "Any Food" genre or a different city.'}
+                ? "Try a different genre, city, or switch to another data source."
+                : 'Try a different genre, city, or data source.'}
             </p>
           </div>
         )}
@@ -665,8 +751,10 @@ export default function Home() {
         <p>
           Data from{" "}
           <a href="https://www.openstreetmap.org" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenStreetMap</a>
-          {" "}(free) or{" "}
-          <a href="https://www.yelp.com/developers" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#d32323" }}>Yelp Fusion API</a>
+          {" · "}
+          <a href="https://www.yelp.com/developers" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#d32323" }}>Yelp</a>
+          {" · "}
+          <a href="https://developers.google.com/maps" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#4285f4" }}>Google Maps</a>
         </p>
       </footer>
     </div>

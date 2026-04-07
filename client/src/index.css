@@ -132,5 +132,15 @@ body {
 /* Active yelp chip */
 .chip.active-yelp { background: #d32323; color: white; border-color: #d32323; }
 
+/* Google badge */
+.google-badge {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 700;
+  background: #e8f0fe; color: #1a73e8; padding: 2px 7px; border-radius: 99px;
+}
+.dark .google-badge { background: hsl(217 30% 16%); color: #8ab4f8; }
+
+/* Active google chip */
+.chip.active-google { background: #1a73e8; color: white; border-color: #1a73e8; }
+
 /* Tooltip */
 .label-xs { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
