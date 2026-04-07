@@ -17,6 +17,7 @@ sqlite.exec(`
     price_range TEXT NOT NULL,
     halal INTEGER NOT NULL DEFAULT 0,
     open_now INTEGER NOT NULL DEFAULT 0,
+    data_source TEXT NOT NULL DEFAULT 'osm',
     results_json TEXT NOT NULL DEFAULT '[]'
   )
 `);

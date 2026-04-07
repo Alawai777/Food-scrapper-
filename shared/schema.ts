@@ -11,6 +11,7 @@ export const searches = sqliteTable("searches", {
   priceRange: text("price_range").notNull(),
   halal: integer("halal", { mode: "boolean" }).notNull().default(false),
   openNow: integer("open_now", { mode: "boolean" }).notNull().default(false),
+  dataSource: text("data_source").notNull().default("osm"),
   resultsJson: text("results_json").notNull().default("[]"),
 });
 
@@ -40,25 +41,25 @@ export const CITY_BBOXES: Record<string, [number, number, number, number]> = {
 export const METRO_DETROIT_CITIES = Object.keys(CITY_BBOXES);
 
 export const CUISINE_GENRES = [
-  { id: "any",           label: "Any Food",        icon: "🍽️", osm: "" },
-  { id: "middle_eastern",label: "Middle Eastern",  icon: "🧆", osm: "middle_eastern|arabic|lebanese|turkish|persian|iranian|syrian|iraqi|jordanian|yemeni" },
-  { id: "american",      label: "American",         icon: "🍔", osm: "american|burger|hot_dog|chicken|diner|steak" },
-  { id: "italian",       label: "Italian",          icon: "🍝", osm: "italian|pasta" },
-  { id: "mexican",       label: "Mexican",          icon: "🌮", osm: "mexican|tex-mex|tacos" },
-  { id: "asian",         label: "Asian",            icon: "🍜", osm: "chinese|japanese|korean|thai|vietnamese|sushi|ramen|asian" },
-  { id: "pizza",         label: "Pizza",            icon: "🍕", osm: "pizza" },
-  { id: "seafood",       label: "Seafood",          icon: "🦞", osm: "seafood|fish|fish_and_chips" },
-  { id: "mediterranean", label: "Mediterranean",    icon: "🥙", osm: "mediterranean|greek" },
-  { id: "indian",        label: "Indian",           icon: "🍛", osm: "indian|pakistani" },
-  { id: "bbq",           label: "BBQ",              icon: "🍖", osm: "barbecue|bbq" },
-  { id: "breakfast",     label: "Breakfast",        icon: "🍳", osm: "breakfast|brunch" },
-  { id: "desserts",      label: "Desserts",         icon: "🧁", osm: "ice_cream|dessert|cake|bakery|donut" },
+  { id: "any",            label: "Any Food",       icon: "🍽️", osm: "",                                                                                       yelp: "" },
+  { id: "middle_eastern", label: "Middle Eastern",  icon: "🧆", osm: "middle_eastern|arabic|lebanese|turkish|persian|iranian|syrian|iraqi|jordanian|yemeni",   yelp: "mideastern,arabic,lebanese,turkish,persian" },
+  { id: "american",       label: "American",        icon: "🍔", osm: "american|burger|hot_dog|chicken|diner|steak",                                           yelp: "newamerican,tradamerican,burgers" },
+  { id: "italian",        label: "Italian",         icon: "🍝", osm: "italian|pasta",                                                                          yelp: "italian" },
+  { id: "mexican",        label: "Mexican",         icon: "🌮", osm: "mexican|tex-mex|tacos",                                                                  yelp: "mexican,tex-mex" },
+  { id: "asian",          label: "Asian",           icon: "🍜", osm: "chinese|japanese|korean|thai|vietnamese|sushi|ramen|asian",                               yelp: "asianfusion,chinese,japanese,korean,thai,vietnamese" },
+  { id: "pizza",          label: "Pizza",           icon: "🍕", osm: "pizza",                                                                                  yelp: "pizza" },
+  { id: "seafood",        label: "Seafood",         icon: "🦞", osm: "seafood|fish|fish_and_chips",                                                            yelp: "seafood" },
+  { id: "mediterranean",  label: "Mediterranean",   icon: "🥙", osm: "mediterranean|greek",                                                                    yelp: "mediterranean,greek" },
+  { id: "indian",         label: "Indian",          icon: "🍛", osm: "indian|pakistani",                                                                       yelp: "indpak" },
+  { id: "bbq",            label: "BBQ",             icon: "🍖", osm: "barbecue|bbq",                                                                           yelp: "bbq" },
+  { id: "breakfast",      label: "Breakfast",       icon: "🍳", osm: "breakfast|brunch",                                                                        yelp: "breakfast_brunch" },
+  { id: "desserts",       label: "Desserts",        icon: "🧁", osm: "ice_cream|dessert|cake|bakery|donut",                                                    yelp: "desserts,icecream,bakeries" },
 ];
 
 export const DINING_STYLES = [
-  { id: "restaurants", label: "Dine In",    icon: "🍽️", osm: ["restaurant"] },
-  { id: "order_food",  label: "Pick Up",    icon: "🥡", osm: ["fast_food", "restaurant"] },
-  { id: "food_trucks", label: "Food Truck", icon: "🚚", osm: ["food_truck", "fast_food"] },
+  { id: "restaurants", label: "Dine In",    icon: "🍽️", osm: ["restaurant"],                 yelp: "restaurants" },
+  { id: "order_food",  label: "Pick Up",    icon: "🥡", osm: ["fast_food", "restaurant"],    yelp: "food" },
+  { id: "food_trucks", label: "Food Truck", icon: "🚚", osm: ["food_truck", "fast_food"],    yelp: "foodtrucks" },
 ];
 
 export const PRICE_RANGES = [
