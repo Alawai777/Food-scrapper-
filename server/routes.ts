@@ -566,6 +566,10 @@ export function registerRoutes(httpServer: Server, app: Express) {
     if (!photoRef) {
       return res.status(400).json({ error: "Missing photo reference" });
     }
+    // Validate photo reference format to prevent SSRF (e.g. "places/abc123/photos/xyz456")
+    if (!/^places\/[\w-]+\/photos\/[\w-]+$/.test(photoRef)) {
+      return res.status(400).json({ error: "Invalid photo reference format" });
+    }
     if (!apiKey) {
       return res.status(400).json({ error: "Missing Google API key" });
     }
@@ -575,6 +579,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
       const response = await axios.get(photoUrl, {
         responseType: "arraybuffer",
         timeout: 10000,
+        maxRedirects: 5,
       });
       const contentType = response.headers["content-type"] || "image/jpeg";
       res.set("Content-Type", contentType);
