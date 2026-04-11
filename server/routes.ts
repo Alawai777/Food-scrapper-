@@ -8,6 +8,9 @@ const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const YELP_BASE   = "https://api.yelp.com/v3";
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
 
+// Cached Google API key for proxying photo requests (set during search)
+let cachedGoogleApiKey = "";
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // OVERPASS (OpenStreetMap) — free, no API key
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -35,8 +38,6 @@ function buildOverpassQuery(
     return `[out:json][timeout:25];(
       node["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i]["diet:halal"="yes"](${bboxStr});
       way["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i]["diet:halal"="yes"](${bboxStr});
-      node["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i](${bboxStr});
-      way["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i](${bboxStr});
     );out center 40;`;
   }
 
@@ -118,7 +119,14 @@ function checkOpenNow(hoursStr: string): boolean | null {
           const days = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
           const [sd, ed] = dr.split("-");
           const si = days.indexOf(sd), ei = days.indexOf(ed), ci = days.indexOf(day);
-          if (si !== -1 && ei !== -1 && ci !== -1 && ci >= si && ci <= ei) dayMatches = true;
+          if (si !== -1 && ei !== -1 && ci !== -1) {
+            if (si <= ei) {
+              if (ci >= si && ci <= ei) dayMatches = true;
+            } else {
+              // Wrapping range (e.g. "Fr-Mo" means Fr, Sa, Su, Mo)
+              if (ci >= si || ci <= ei) dayMatches = true;
+            }
+          }
         } else if (dr === day) dayMatches = true;
       }
       if (dayMatches) {
@@ -366,11 +374,11 @@ async function searchGoogle(params: any, apiKey: string) {
       distance = (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1) + " mi";
     }
 
-    // Photo URL — Google Places photo reference
+    // Photo URL — proxy through server to avoid exposing API key
     let imageUrl = "";
     if (p.photos?.length > 0) {
       const photoName = p.photos[0].name; // e.g. "places/xxx/photos/yyy"
-      imageUrl = `${GOOGLE_PLACES_BASE}/${photoName}/media?key=${apiKey}&maxWidthPx=600&maxHeightPx=400`;
+      imageUrl = `/api/google-photo?ref=${encodeURIComponent(photoName)}`;
     }
 
     // Detect halal from name or types
@@ -456,6 +464,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
           });
         }
         results = await searchGoogle(req.body, resolvedGoogleKey);
+        // Cache the key for photo proxy requests
+        cachedGoogleApiKey = resolvedGoogleKey;
       } else {
         results = await searchOverpass(req.body);
       }
@@ -546,5 +556,32 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.get("/api/recent", async (_req, res) => {
     const recent = await storage.getRecentSearches(6);
     res.json(recent);
+  });
+
+  // Proxy Google Places photos to avoid exposing API key to the client
+  app.get("/api/google-photo", async (req, res) => {
+    const photoRef = req.query.ref as string;
+    const apiKey = cachedGoogleApiKey || process.env.GOOGLE_MAPS_API_KEY || "";
+
+    if (!photoRef) {
+      return res.status(400).json({ error: "Missing photo reference" });
+    }
+    if (!apiKey) {
+      return res.status(400).json({ error: "Missing Google API key" });
+    }
+
+    try {
+      const photoUrl = `${GOOGLE_PLACES_BASE}/${photoRef}/media?key=${apiKey}&maxWidthPx=600&maxHeightPx=400`;
+      const response = await axios.get(photoUrl, {
+        responseType: "arraybuffer",
+        timeout: 10000,
+      });
+      const contentType = response.headers["content-type"] || "image/jpeg";
+      res.set("Content-Type", contentType);
+      res.set("Cache-Control", "public, max-age=86400");
+      res.send(Buffer.from(response.data));
+    } catch {
+      res.status(502).json({ error: "Failed to fetch photo" });
+    }
   });
 }
