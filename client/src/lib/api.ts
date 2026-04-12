@@ -327,16 +327,15 @@ async function fetchOverpassWithRetry(query: string): Promise<Response> {
   let lastError: Error | null = null;
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 50000);
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 50000);
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `data=${encodeURIComponent(query)}`,
         signal: controller.signal,
       });
-      clearTimeout(timer);
 
       if (response.ok) return response;
       if (response.status === 429 || response.status >= 500) {
@@ -346,6 +345,8 @@ async function fetchOverpassWithRetry(query: string): Promise<Response> {
       throw new Error(`Overpass error: ${response.status}`);
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      clearTimeout(timer);
     }
   }
 
