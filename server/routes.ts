@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import type { Server } from "http";
 import axios from "axios";
 import { storage } from "./storage";
@@ -7,6 +7,122 @@ import { CITY_BBOXES, CUISINE_GENRES, DINING_STYLES } from "@shared/schema";
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const YELP_BASE   = "https://api.yelp.com/v3";
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface Restaurant {
+  id: string;
+  name: string;
+  cuisine: string;
+  amenity: string;
+  address: string;
+  phone: string;
+  website: string;
+  openingHours: string;
+  isOpen: boolean | null;
+  isHalal: boolean;
+  isVegetarian: boolean;
+  isVegan: boolean;
+  lat: number;
+  lon: number;
+  distance: string;
+  imageUrl: string;
+  mapsLink: string;
+  source: "osm" | "yelp" | "google";
+  rating: number;
+  reviewCount: number;
+  price: string;
+  yelpUrl: string;
+  googleMapsUrl?: string;
+}
+
+interface SearchParams {
+  city: string;
+  genre: string;
+  diningStyle: string;
+  halal: boolean;
+  openNow: boolean;
+  sortBy?: string;
+  userLat?: string | number;
+  userLon?: string | number;
+  priceRange?: string;
+  groupSize?: string | number;
+  dataSource?: string;
+  yelpApiKey?: string;
+  googleApiKey?: string;
+}
+
+interface OsmElement {
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
+}
+
+interface YelpBusiness {
+  id: string;
+  name: string;
+  categories?: Array<{ alias: string; title: string }>;
+  location?: { display_address?: string[] };
+  display_phone?: string;
+  coordinates?: { latitude: number; longitude: number };
+  distance?: number;
+  image_url?: string;
+  rating?: number;
+  review_count?: number;
+  price?: string;
+  url?: string;
+  is_closed?: boolean;
+}
+
+interface GooglePlace {
+  id?: string;
+  displayName?: { text: string };
+  formattedAddress?: string;
+  location?: { latitude: number; longitude: number };
+  rating?: number;
+  userRatingCount?: number;
+  priceLevel?: string;
+  currentOpeningHours?: {
+    openNow?: boolean;
+    weekdayDescriptions?: string[];
+  };
+  nationalPhoneNumber?: string;
+  websiteUri?: string;
+  googleMapsUri?: string;
+  photos?: Array<{ name: string }>;
+  types?: string[];
+  primaryTypeDisplayName?: { text: string };
+  servesVegetarianFood?: boolean;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HAVERSINE DISTANCE — shared utility
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function haversineDistanceMiles(
+  lat1: number, lon1: number, lat2: number, lon2: number
+): number {
+  const R = 3958.8; // Earth radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(
+  lat: number, lon: number, refLat: number, refLon: number
+): string {
+  if (!refLat || !refLon || !lat || !lon) return "";
+  return haversineDistanceMiles(refLat, refLon, lat, lon).toFixed(1) + " mi";
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // OVERPASS (OpenStreetMap) — free, no API key
@@ -35,8 +151,6 @@ function buildOverpassQuery(
     return `[out:json][timeout:25];(
       node["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i]["diet:halal"="yes"](${bboxStr});
       way["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i]["diet:halal"="yes"](${bboxStr});
-      node["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i](${bboxStr});
-      way["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i](${bboxStr});
     );out center 40;`;
   }
 
@@ -46,7 +160,7 @@ function buildOverpassQuery(
   );out center 40;`;
 }
 
-function osmToRestaurant(el: any, centerLat?: number, centerLon?: number) {
+function osmToRestaurant(el: OsmElement, centerLat?: number, centerLon?: number): Restaurant {
   const tags = el.tags || {};
   const lat = el.lat ?? el.center?.lat ?? 0;
   const lon = el.lon ?? el.center?.lon ?? 0;
@@ -54,15 +168,7 @@ function osmToRestaurant(el: any, centerLat?: number, centerLon?: number) {
   const addressParts = [tags["addr:housenumber"], tags["addr:street"], tags["addr:city"]].filter(Boolean);
   const address = addressParts.length ? addressParts.join(" ") : tags["addr:full"] || "";
 
-  let distance = "";
-  if (centerLat && centerLon && lat && lon) {
-    const R = 3958.8;
-    const dLat = ((lat - centerLat) * Math.PI) / 180;
-    const dLon = ((lon - centerLon) * Math.PI) / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos((centerLat * Math.PI) / 180) * Math.cos((lat * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-    distance = (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1) + " mi";
-  }
+  const distance = formatDistance(lat, lon, centerLat || 0, centerLon || 0);
 
   const isHalal = tags["diet:halal"] === "yes" ||
     (tags.name || "").toLowerCase().includes("halal") ||
@@ -118,7 +224,14 @@ function checkOpenNow(hoursStr: string): boolean | null {
           const days = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
           const [sd, ed] = dr.split("-");
           const si = days.indexOf(sd), ei = days.indexOf(ed), ci = days.indexOf(day);
-          if (si !== -1 && ei !== -1 && ci !== -1 && ci >= si && ci <= ei) dayMatches = true;
+          if (si !== -1 && ei !== -1 && ci !== -1) {
+            // Handle ranges that wrap around the week (e.g., Fr-Mo = Fr,Sa,Su,Mo)
+            if (si <= ei) {
+              if (ci >= si && ci <= ei) dayMatches = true;
+            } else {
+              if (ci >= si || ci <= ei) dayMatches = true;
+            }
+          }
         } else if (dr === day) dayMatches = true;
       }
       if (dayMatches) {
@@ -131,7 +244,7 @@ function checkOpenNow(hoursStr: string): boolean | null {
   } catch { return null; }
 }
 
-async function searchOverpass(params: any) {
+async function searchOverpass(params: SearchParams): Promise<Restaurant[]> {
   const { city, genre, diningStyle, halal, openNow, sortBy, userLat, userLon } = params;
 
   const bbox = CITY_BBOXES[city];
@@ -153,19 +266,19 @@ async function searchOverpass(params: any) {
   const refLat = userLat ? Number(userLat) : centerLat;
   const refLon = userLon ? Number(userLon) : centerLon;
 
-  let results = (response.data.elements || [])
-    .filter((el: any) => el.tags?.name)
-    .map((el: any) => osmToRestaurant(el, refLat, refLon));
+  let results: Restaurant[] = (response.data.elements || [])
+    .filter((el: OsmElement) => el.tags?.name)
+    .map((el: OsmElement) => osmToRestaurant(el, refLat, refLon));
 
   // Dedupe
   const seen = new Set<string>();
-  results = results.filter((r: any) => { if (seen.has(r.name)) return false; seen.add(r.name); return true; });
+  results = results.filter((r) => { if (seen.has(r.name)) return false; seen.add(r.name); return true; });
 
-  if (openNow) results = results.filter((r: any) => r.isOpen === true);
+  if (openNow) results = results.filter((r) => r.isOpen === true);
 
-  if (sortBy === "distance") results.sort((a: any, b: any) => parseFloat(a.distance) - parseFloat(b.distance));
-  else if (sortBy === "name") results.sort((a: any, b: any) => a.name.localeCompare(b.name));
-  else results.sort((a: any, b: any) => (a.isHalal === b.isHalal ? 0 : a.isHalal ? -1 : 1));
+  if (sortBy === "distance") results.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+  else if (sortBy === "name") results.sort((a, b) => a.name.localeCompare(b.name));
+  else results.sort((a, b) => (a.isHalal === b.isHalal ? 0 : a.isHalal ? -1 : 1));
 
   return results;
 }
@@ -174,7 +287,7 @@ async function searchOverpass(params: any) {
 // YELP FUSION API — requires API key, richer data
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function searchYelp(params: any, apiKey: string) {
+async function searchYelp(params: SearchParams, apiKey: string): Promise<Restaurant[]> {
   const { city, genre, diningStyle, halal, priceRange, openNow, sortBy, groupSize } = params;
 
   const genreConfig  = CUISINE_GENRES.find(g => g.id === genre);
@@ -219,8 +332,8 @@ async function searchYelp(params: any, apiKey: string) {
     timeout: 15000,
   });
 
-  return (response.data.businesses || []).map((b: any) => {
-    const catNames = b.categories?.map((c: any) => c.title) || [];
+  return (response.data.businesses || []).map((b: YelpBusiness): Restaurant => {
+    const catNames = b.categories?.map((c) => c.title) || [];
     const isHalal = catNames.some((c: string) => c.toLowerCase().includes("halal")) ||
       (b.name || "").toLowerCase().includes("halal");
 
@@ -289,7 +402,7 @@ const GOOGLE_PRICE_MAP: Record<string, string> = {
   PRICE_LEVEL_VERY_EXPENSIVE: "$$$$",
 };
 
-async function searchGoogle(params: any, apiKey: string) {
+async function searchGoogle(params: SearchParams, apiKey: string): Promise<Restaurant[]> {
   const { city, genre, diningStyle, halal, priceRange, openNow, sortBy, userLat, userLon } = params;
 
   const genreConfig  = CUISINE_GENRES.find(g => g.id === genre);
@@ -306,7 +419,7 @@ async function searchGoogle(params: any, apiKey: string) {
   const textQuery = queryParts.join(" ") || `restaurants in ${city}`;
 
   // Build request body for Text Search (New)
-  const body: any = {
+  const body: Record<string, unknown> = {
     textQuery,
     maxResultCount: 20,
     locationBias: {
@@ -351,31 +464,24 @@ async function searchGoogle(params: any, apiKey: string) {
   const refLat = userLat ? Number(userLat) : centerLat;
   const refLon = userLon ? Number(userLon) : centerLon;
 
-  return places.map((p: any) => {
+  return places.map((p: GooglePlace): Restaurant => {
     const lat = p.location?.latitude || 0;
     const lon = p.location?.longitude || 0;
 
-    // Distance
-    let distance = "";
-    if (refLat && refLon && lat && lon) {
-      const R = 3958.8;
-      const dLat = ((lat - refLat) * Math.PI) / 180;
-      const dLon = ((lon - refLon) * Math.PI) / 180;
-      const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos((refLat * Math.PI) / 180) * Math.cos((lat * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-      distance = (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1) + " mi";
-    }
+    // Distance — use shared utility
+    const distance = formatDistance(lat, lon, refLat, refLon);
 
-    // Photo URL — Google Places photo reference
+    // Photo URL — use server-side proxy to avoid exposing API key
     let imageUrl = "";
-    if (p.photos?.length > 0) {
+    if (p.photos?.length && p.photos.length > 0) {
       const photoName = p.photos[0].name; // e.g. "places/xxx/photos/yyy"
-      imageUrl = `${GOOGLE_PLACES_BASE}/${photoName}/media?key=${apiKey}&maxWidthPx=600&maxHeightPx=400`;
+      imageUrl = `/api/google-photo?ref=${encodeURIComponent(photoName)}`;
     }
 
     // Detect halal from name or types
     const nameStr = p.displayName?.text || "";
-    const typesStr = (p.types || []).join(" ");
+    const typesArr = p.types || [];
+    const typesStr = typesArr.join(" ");
     const isHalal = halal || nameStr.toLowerCase().includes("halal") || typesStr.includes("halal");
 
     // Opening hours
@@ -394,7 +500,7 @@ async function searchGoogle(params: any, apiKey: string) {
     return {
       id: p.id || String(Math.random()),
       name: nameStr,
-      cuisine: p.primaryTypeDisplayName?.text || (p.types || []).slice(0, 3).join(", ").replace(/_/g, " "),
+      cuisine: p.primaryTypeDisplayName?.text || typesArr.slice(0, 3).join(", ").replace(/_/g, " "),
       amenity: "",
       address: p.formattedAddress || "",
       phone: p.nationalPhoneNumber || "",
@@ -410,7 +516,7 @@ async function searchGoogle(params: any, apiKey: string) {
       source: "google" as const,
       rating: p.rating || 0,
       reviewCount: p.userRatingCount || 0,
-      price: GOOGLE_PRICE_MAP[p.priceLevel] || "",
+      price: (p.priceLevel && GOOGLE_PRICE_MAP[p.priceLevel]) || "",
       yelpUrl: "",
       googleMapsUrl: p.googleMapsUri || "",
     };
@@ -420,6 +526,9 @@ async function searchGoogle(params: any, apiKey: string) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROUTES
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// Track the last Google API key used so the photo proxy can access it
+let lastGoogleApiKey = "";
 
 export function registerRoutes(httpServer: Server, app: Express) {
 
@@ -437,8 +546,11 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const resolvedYelpKey   = yelpApiKey   || process.env.YELP_API_KEY   || "";
     const resolvedGoogleKey = googleApiKey || process.env.GOOGLE_MAPS_API_KEY || "";
 
+    // Store for photo proxy
+    if (resolvedGoogleKey) lastGoogleApiKey = resolvedGoogleKey;
+
     try {
-      let results: any[];
+      let results: Restaurant[];
 
       if (source === "yelp") {
         if (!resolvedYelpKey) {
@@ -472,20 +584,21 @@ export function registerRoutes(httpServer: Server, app: Express) {
       });
 
       res.json({ results, source, total: results.length });
-    } catch (err: any) {
-      console.error(`${source} error:`, err?.response?.data || err.message);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: unknown; status?: number }; message?: string };
+      console.error(`${source} error:`, axiosErr?.response?.data || (err instanceof Error ? err.message : err));
 
       // Source-specific error handling
-      if (source === "yelp" && err?.response?.status === 401) {
+      if (source === "yelp" && axiosErr?.response?.status === 401) {
         return res.status(401).json({ error: "Invalid Yelp API key. Check your key and try again.", results: [] });
       }
-      if (source === "yelp" && err?.response?.status === 429) {
+      if (source === "yelp" && axiosErr?.response?.status === 429) {
         return res.status(429).json({ error: "Yelp rate limit reached. Try again later or switch to OpenStreetMap.", results: [] });
       }
-      if (source === "google" && err?.response?.status === 403) {
+      if (source === "google" && axiosErr?.response?.status === 403) {
         return res.status(403).json({ error: "Google API key invalid or Places API not enabled. Check your key in Google Cloud Console.", results: [] });
       }
-      if (source === "google" && err?.response?.status === 429) {
+      if (source === "google" && axiosErr?.response?.status === 429) {
         return res.status(429).json({ error: "Google API rate limit reached. Try again later.", results: [] });
       }
 
@@ -510,8 +623,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
         timeout: 8000,
       });
       res.json({ valid: true });
-    } catch (err: any) {
-      res.json({ valid: false, error: err?.response?.status === 401 ? "Invalid API key" : "Connection error" });
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number } };
+      res.json({ valid: false, error: axiosErr?.response?.status === 401 ? "Invalid API key" : "Connection error" });
     }
   });
 
@@ -534,8 +648,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
         }
       );
       res.json({ valid: true });
-    } catch (err: any) {
-      const status = err?.response?.status;
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number } };
+      const status = axiosErr?.response?.status;
       const msg = status === 403 ? "API key invalid or Places API (New) not enabled" :
                   status === 400 ? "Places API not enabled for this key" :
                   "Connection error";
@@ -546,5 +661,39 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.get("/api/recent", async (_req, res) => {
     const recent = await storage.getRecentSearches(6);
     res.json(recent);
+  });
+
+  // Google photo proxy — serves photos without exposing the API key to the client
+  app.get("/api/google-photo", async (req: Request, res: Response) => {
+    const ref = req.query.ref as string;
+    if (!ref) {
+      return res.status(400).json({ error: "Missing ref parameter" });
+    }
+
+    // Validate ref format to prevent SSRF: must match "places/<id>/photos/<id>"
+    if (!/^places\/[\w-]+\/photos\/[\w-]+$/.test(ref)) {
+      return res.status(400).json({ error: "Invalid photo reference format" });
+    }
+
+    const apiKey = lastGoogleApiKey || process.env.GOOGLE_MAPS_API_KEY || "";
+    if (!apiKey) {
+      return res.status(400).json({ error: "No Google API key configured" });
+    }
+
+    try {
+      const photoUrl = `${GOOGLE_PLACES_BASE}/${ref}/media?key=${apiKey}&maxWidthPx=600&maxHeightPx=400`;
+      const photoRes = await axios.get(photoUrl, {
+        responseType: "arraybuffer",
+        timeout: 10000,
+        maxRedirects: 5,
+      });
+
+      const contentType = photoRes.headers["content-type"] || "image/jpeg";
+      res.set("Content-Type", contentType);
+      res.set("Cache-Control", "public, max-age=86400"); // Cache for 24h
+      res.send(Buffer.from(photoRes.data));
+    } catch {
+      res.status(502).json({ error: "Failed to fetch photo" });
+    }
   });
 }
