@@ -2,6 +2,22 @@
 
 A Metro Detroit restaurant discovery web app that aggregates data from **OpenStreetMap**, **Yelp**, and **Google Maps** to help you find your next meal.
 
+## 🌐 Use It Now — No Install Required
+
+**Open the app in any browser on iOS, Android, or desktop:**
+
+👉 **https://alawai777.github.io/Food-scrapper-/**
+
+### Add to Home Screen (iOS / Android)
+
+YartedEats is a **Progressive Web App (PWA)** — you can install it like a native app:
+
+- **iPhone / iPad**: Open the link in Safari → tap the **Share** button → **Add to Home Screen**
+- **Android**: Open the link in Chrome → tap the **⋮ menu** → **Add to Home Screen** (or accept the install prompt)
+- **Desktop**: Click the install icon in the browser address bar
+
+Once added, it launches full-screen like a native app — no App Store needed.
+
 ## Features
 
 - **Multi-source search** — Query restaurants from OpenStreetMap (free), Yelp Fusion API, or Google Maps Places API
@@ -10,16 +26,18 @@ A Metro Detroit restaurant discovery web app that aggregates data from **OpenStr
 - **13 cuisine genres** — Middle Eastern, American, Italian, Mexican, Asian, Pizza, Seafood, Mediterranean, Indian, BBQ, Breakfast, Desserts
 - **Location-aware sorting** — Sort by distance using your geolocation
 - **Dark/light theme** — Toggle between color modes
-- **Search history** — Recent searches persisted in a SQLite database
+- **Works offline** — Basic offline shell via service worker
+- **Runs anywhere** — Static site, no backend server needed
 
 ## Tech Stack
 
 - **Frontend**: React 18, TypeScript, Tailwind CSS, shadcn/ui, Wouter, TanStack Query
-- **Backend**: Express 5, TypeScript, Drizzle ORM, Better-SQLite3
-- **Build**: Vite, esbuild
-- **APIs**: OpenStreetMap Overpass, Yelp Fusion v3, Google Maps Places (New)
+- **APIs**: OpenStreetMap Overpass (free, no key), Yelp Fusion v3, Google Maps Places (New)
+- **Build**: Vite
+- **Hosting**: GitHub Pages (auto-deployed on push to `main`)
+- **PWA**: Service worker + web app manifest for iOS/Android installability
 
-## Getting Started
+## Getting Started (Development)
 
 ### Prerequisites
 
@@ -40,12 +58,13 @@ npm run dev
 
 The app starts at `http://localhost:5000`.
 
-### Production Build
+### Production Build (Static Site)
 
 ```bash
-npm run build
-npm start
+npx vite build --config vite.config.ts
 ```
+
+Output goes to `dist/public/` — deploy anywhere (GitHub Pages, Netlify, Vercel, etc.).
 
 ### Type Checking
 
@@ -60,47 +79,40 @@ YartedEats works out of the box with **OpenStreetMap** (no API key needed). For 
 - **Yelp Fusion API** — Get a free key at [yelp.com/developers](https://www.yelp.com/developers/v3/manage_app)
 - **Google Maps Places API** — Get a key at [Google Cloud Console](https://console.cloud.google.com/apis/credentials) ($200/mo free credit)
 
-Enter your keys in the ⚙️ Settings panel within the app.
+Enter your keys in the ⚙️ Settings panel within the app. Keys are stored in your browser only.
+
+## How It Works
+
+The app runs **entirely in your browser** — no backend server required:
+
+1. **OpenStreetMap** searches go directly to the [Overpass API](https://overpass-api.de/) (free, full CORS support)
+2. **Google Maps** searches go directly to the [Places API](https://developers.google.com/maps/documentation/places/web-service) (supports CORS with your API key)
+3. **Yelp** searches use a CORS proxy since Yelp's API doesn't support browser requests
+4. Search history is saved in **localStorage** (stays on your device)
+
+## Deployment
+
+The app automatically deploys to GitHub Pages when you push to `main` via the `.github/workflows/deploy.yml` workflow.
+
+To deploy manually or to another host, just build and upload the `dist/public/` folder.
 
 ## Project Structure
 
 ```
-├── client/              # React frontend
+├── client/              # React frontend (this IS the app)
 │   ├── src/
 │   │   ├── pages/       # Page components (Home, NotFound)
 │   │   ├── components/  # shadcn/ui components + ThemeProvider
 │   │   ├── hooks/       # Custom React hooks
-│   │   └── lib/         # Query client, utilities
+│   │   └── lib/         # API client, query client, utilities
+│   ├── public/          # Static assets (PWA manifest, icons, service worker)
 │   └── index.html
-├── server/              # Express backend
-│   ├── routes.ts        # API endpoints (search, validate, photo proxy)
-│   ├── storage.ts       # Database layer (Drizzle ORM)
-│   ├── db.ts            # SQLite connection
-│   ├── index.ts         # Server entry point
-│   ├── vite.ts          # Vite dev server integration
-│   └── static.ts        # Production static file serving
+├── server/              # Express backend (optional, for local dev)
 ├── shared/              # Shared code between client/server
-│   └── schema.ts        # DB schema, city bounding boxes, cuisine/dining configs
-└── drizzle.config.ts    # Drizzle Kit configuration
+│   └── schema.ts        # City bounding boxes, cuisine/dining configs
+├── .github/workflows/   # GitHub Actions for auto-deploy
+└── vite.config.ts       # Vite build configuration
 ```
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/search` | Search restaurants (accepts `dataSource`: `osm`, `yelp`, `google`) |
-| `POST` | `/api/validate-yelp-key` | Validate a Yelp API key |
-| `POST` | `/api/validate-google-key` | Validate a Google Maps API key |
-| `GET`  | `/api/google-photo?ref=` | Proxy for Google Places photos (avoids API key exposure) |
-| `GET`  | `/api/recent` | Get recent search history |
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `PORT` | Server port (default: 5000) | No |
-| `YELP_API_KEY` | Yelp Fusion API key (alternative to in-app setting) | No |
-| `GOOGLE_MAPS_API_KEY` | Google Maps API key (alternative to in-app setting) | No |
 
 ## License
 

@@ -1,7 +1,13 @@
 import { useState, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { useTheme } from "@/components/ThemeProvider";
+import {
+  searchRestaurants,
+  validateYelpKey,
+  validateGoogleKey,
+  type Restaurant,
+  type SearchResult,
+} from "@/lib/api";
 import {
   METRO_DETROIT_CITIES, CUISINE_GENRES, DINING_STYLES,
   PRICE_RANGES, SORT_OPTIONS,
@@ -18,32 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-
-interface Restaurant {
-  id: string;
-  name: string;
-  cuisine: string;
-  amenity: string;
-  address: string;
-  phone: string;
-  website: string;
-  openingHours: string;
-  isOpen: boolean | null;
-  isHalal: boolean;
-  isVegetarian: boolean;
-  isVegan: boolean;
-  lat: number;
-  lon: number;
-  distance: string;
-  mapsLink: string;
-  imageUrl: string;
-  source: "osm" | "yelp" | "google";
-  rating: number;
-  reviewCount: number;
-  price: string;
-  yelpUrl: string;
-  googleMapsUrl?: string;
-}
 
 // ── Star rating ───────────────────────────────────────────────────────────────
 function StarRating({ rating }: { rating: number }) {
@@ -293,8 +273,7 @@ function SettingsPanel({
     if (!yelpKey.trim()) return;
     setYelpTesting(true); setYelpStatus("idle");
     try {
-      const res = await apiRequest("POST", "/api/validate-yelp-key", { yelpApiKey: yelpKey.trim() });
-      const data = await res.json();
+      const data = await validateYelpKey(yelpKey.trim());
       if (data.valid) {
         setYelpStatus("valid");
         toast({ title: "Yelp key is valid", description: "You can now search with Yelp data." });
@@ -310,8 +289,7 @@ function SettingsPanel({
     if (!googleKey.trim()) return;
     setGoogleTesting(true); setGoogleStatus("idle");
     try {
-      const res = await apiRequest("POST", "/api/validate-google-key", { googleApiKey: googleKey.trim() });
-      const data = await res.json();
+      const data = await validateGoogleKey(googleKey.trim());
       if (data.valid) {
         setGoogleStatus("valid");
         toast({ title: "Google key is valid", description: "You can now search with Google Maps data." });
@@ -427,9 +405,9 @@ export default function Home() {
   }, []);
 
   const searchMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<SearchResult> => {
       setErrorMsg("");
-      const res = await apiRequest("POST", "/api/search", {
+      return searchRestaurants({
         city, genre, diningStyle, groupSize,
         priceRange: priceRange.length ? priceRange.join(",") : "all",
         halal, openNow, sortBy, userLat, userLon,
@@ -437,9 +415,8 @@ export default function Home() {
         yelpApiKey: dataSource === "yelp" ? yelpKey.trim() : undefined,
         googleApiKey: dataSource === "google" ? googleKey.trim() : undefined,
       });
-      return res.json();
     },
-    onSuccess: data => {
+    onSuccess: (data: SearchResult) => {
       if (data.error) setErrorMsg(data.error);
       setResults(data.results || []);
       setHasSearched(true);
