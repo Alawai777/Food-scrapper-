@@ -4,7 +4,11 @@ import axios from "axios";
 import { storage } from "./storage";
 import { CITY_BBOXES, CUISINE_GENRES, DINING_STYLES } from "@shared/schema";
 
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const OVERPASS_ENDPOINTS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+];
 const YELP_BASE   = "https://api.yelp.com/v3";
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
 
@@ -141,20 +145,20 @@ function buildOverpassQuery(
   const halalFilter   = halal ? '["diet:halal"="yes"]' : "";
 
   if (halal && !cuisineOsm) {
-    return `[out:json][timeout:25];(
+    return `[out:json][timeout:45];(
       node["amenity"~"${amenityRegex}"]["diet:halal"="yes"](${bboxStr});
       way["amenity"~"${amenityRegex}"]["diet:halal"="yes"](${bboxStr});
     );out center 40;`;
   }
 
   if (cuisineOsm && halal) {
-    return `[out:json][timeout:25];(
+    return `[out:json][timeout:45];(
       node["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i]["diet:halal"="yes"](${bboxStr});
       way["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i]["diet:halal"="yes"](${bboxStr});
     );out center 40;`;
   }
 
-  return `[out:json][timeout:25];(
+  return `[out:json][timeout:45];(
     node["amenity"~"${amenityRegex}"]${cuisineFilter}${halalFilter}(${bboxStr});
     way["amenity"~"${amenityRegex}"]${cuisineFilter}${halalFilter}(${bboxStr});
   );out center 40;`;
@@ -244,6 +248,32 @@ function checkOpenNow(hoursStr: string): boolean | null {
   } catch { return null; }
 }
 
+async function fetchOverpassWithRetry(query: string): Promise<import("axios").AxiosResponse> {
+  let lastError: Error | null = null;
+
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const response = await axios.post(endpoint, `data=${encodeURIComponent(query)}`, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 50000,
+      });
+      return response;
+    } catch (err) {
+      const isRetryable = axios.isAxiosError(err) &&
+        (err.code === "ECONNABORTED" || err.code === "ETIMEDOUT" ||
+         (err.response?.status !== undefined && (err.response.status === 429 || err.response.status >= 500)));
+
+      if (isRetryable) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError ?? new Error("All Overpass endpoints failed");
+}
+
 async function searchOverpass(params: SearchParams): Promise<Restaurant[]> {
   const { city, genre, diningStyle, halal, openNow, sortBy, userLat, userLon } = params;
 
@@ -256,10 +286,7 @@ async function searchOverpass(params: SearchParams): Promise<Restaurant[]> {
   const amenityTypes  = diningConfig?.osm || ["restaurant"];
 
   const query = buildOverpassQuery(bbox, amenityTypes, cuisineOsm, Boolean(halal));
-  const response = await axios.post(OVERPASS_URL, `data=${encodeURIComponent(query)}`, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: 28000,
-  });
+  const response = await fetchOverpassWithRetry(query);
 
   const centerLat = (bbox[0] + bbox[2]) / 2;
   const centerLon = (bbox[1] + bbox[3]) / 2;

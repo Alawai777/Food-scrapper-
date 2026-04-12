@@ -115,7 +115,11 @@ interface GooglePlace {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const OVERPASS_ENDPOINTS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+];
 const YELP_BASE = "https://api.yelp.com/v3";
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
 const CORS_PROXY = "https://corsproxy.io/?url=";
@@ -240,20 +244,20 @@ function buildOverpassQuery(
   const halalFilter = halal ? '["diet:halal"="yes"]' : "";
 
   if (halal && !cuisineOsm) {
-    return `[out:json][timeout:25];(
+    return `[out:json][timeout:45];(
       node["amenity"~"${amenityRegex}"]["diet:halal"="yes"](${bboxStr});
       way["amenity"~"${amenityRegex}"]["diet:halal"="yes"](${bboxStr});
     );out center 40;`;
   }
 
   if (cuisineOsm && halal) {
-    return `[out:json][timeout:25];(
+    return `[out:json][timeout:45];(
       node["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i]["diet:halal"="yes"](${bboxStr});
       way["amenity"~"${amenityRegex}"]["cuisine"~"${cuisineOsm}",i]["diet:halal"="yes"](${bboxStr});
     );out center 40;`;
   }
 
-  return `[out:json][timeout:25];(
+  return `[out:json][timeout:45];(
     node["amenity"~"${amenityRegex}"]${cuisineFilter}${halalFilter}(${bboxStr});
     way["amenity"~"${amenityRegex}"]${cuisineFilter}${halalFilter}(${bboxStr});
   );out center 40;`;
@@ -319,6 +323,35 @@ function osmToRestaurant(
   };
 }
 
+async function fetchOverpassWithRetry(query: string): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 50000);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (response.ok) return response;
+      if (response.status === 429 || response.status >= 500) {
+        lastError = new Error(`Overpass error: ${response.status}`);
+        continue;
+      }
+      throw new Error(`Overpass error: ${response.status}`);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  throw lastError ?? new Error("All Overpass endpoints failed");
+}
+
 async function searchOverpass(params: SearchParams): Promise<Restaurant[]> {
   const { city, genre, diningStyle, halal, openNow, sortBy, userLat, userLon } =
     params;
@@ -333,13 +366,7 @@ async function searchOverpass(params: SearchParams): Promise<Restaurant[]> {
 
   const query = buildOverpassQuery(bbox, amenityTypes, cuisineOsm, Boolean(halal));
 
-  const response = await fetch(OVERPASS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-
-  if (!response.ok) throw new Error(`Overpass error: ${response.status}`);
+  const response = await fetchOverpassWithRetry(query);
   const data = await response.json();
 
   const centerLat = (bbox[0] + bbox[2]) / 2;
