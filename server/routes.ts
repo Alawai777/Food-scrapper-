@@ -473,7 +473,7 @@ async function searchGoogle(params: SearchParams, apiKey: string): Promise<Resta
 
     // Photo URL — use server-side proxy to avoid exposing API key
     let imageUrl = "";
-    if (p.photos?.length && p.photos.length > 0) {
+    if (p.photos && p.photos.length > 0) {
       const photoName = p.photos[0].name; // e.g. "places/xxx/photos/yyy"
       imageUrl = `/api/google-photo?ref=${encodeURIComponent(photoName)}`;
     }
@@ -541,7 +541,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const source = dataSource || "osm";
+    const source = ["osm", "yelp", "google"].includes(dataSource) ? dataSource : "osm";
     // Resolve keys: request body > server env var
     const resolvedYelpKey   = yelpApiKey   || process.env.YELP_API_KEY   || "";
     const resolvedGoogleKey = googleApiKey || process.env.GOOGLE_MAPS_API_KEY || "";
@@ -671,7 +671,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     }
 
     // Validate ref format to prevent SSRF: must match "places/<id>/photos/<id>"
-    if (!/^places\/[\w-]+\/photos\/[\w-]+$/.test(ref)) {
+    if (!/^places\/[A-Za-z0-9_]+\/photos\/[A-Za-z0-9_]+$/.test(ref)) {
       return res.status(400).json({ error: "Invalid photo reference format" });
     }
 
