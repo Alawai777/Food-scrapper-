@@ -583,7 +583,7 @@ async function searchFoursquare(params: SearchParams, apiKey: string): Promise<R
     ll: `${centerLat},${centerLon}`,
     radius: "12000", // ~7.5 miles
     limit: "30",
-    sort: sortBy === "distance" ? "DISTANCE" : sortBy === "rating" ? "RATING" : "RELEVANCE",
+    sort: sortBy === "distance" ? "DISTANCE" : (sortBy === "rating" || sortBy === "hidden_gems") ? "RATING" : "RELEVANCE",
   };
 
   // Add category filter if available

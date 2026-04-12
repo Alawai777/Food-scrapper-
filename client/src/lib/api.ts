@@ -720,7 +720,7 @@ async function searchFoursquare(
     ll: `${centerLat},${centerLon}`,
     radius: "12000",
     limit: "30",
-    sort: sortBy === "distance" ? "DISTANCE" : sortBy === "rating" ? "RATING" : "RELEVANCE",
+    sort: sortBy === "distance" ? "DISTANCE" : (sortBy === "rating" || sortBy === "hidden_gems") ? "RATING" : "RELEVANCE",
   };
 
   const categories = genreConfig?.foursquare;

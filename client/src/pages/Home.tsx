@@ -19,6 +19,9 @@ import {
   Leaf, Filter, Settings, Star, Eye, EyeOff, ExternalLink,
   Database, Zap, X,
 } from "lucide-react";
+
+const FOURSQUARE_COLOR = "#3333ff";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
@@ -65,7 +68,7 @@ function OpenBadge({ isOpen }: { isOpen: boolean | null }) {
 function SourceBadge({ source }: { source: string }) {
   if (source === "yelp") return <span className="yelp-badge">Yelp</span>;
   if (source === "google") return <span className="google-badge">Google</span>;
-  if (source === "foursquare") return <span className="foursquare-badge" style={{ background: "#3333ff", color: "white", fontSize: "0.65rem", fontWeight: 700, padding: "2px 8px", borderRadius: "9999px" }}>Foursquare</span>;
+  if (source === "foursquare") return <span className="foursquare-badge" style={{ background: FOURSQUARE_COLOR, color: "white", fontSize: "0.65rem", fontWeight: 700, padding: "2px 8px", borderRadius: "9999px" }}>Foursquare</span>;
   return <span className="osm-badge">OSM</span>;
 }
 function HiddenGemBadge({ score }: { score?: number }) {
@@ -192,7 +195,7 @@ function RestaurantCard({ r }: { r: Restaurant }) {
           )}
           {isFoursquare && r.foursquareUrl && (
             <a href={r.foursquareUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: "#3333ff" }}>
+              className="flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: FOURSQUARE_COLOR }}>
               <ExternalLink className="w-3 h-3" /> Foursquare
             </a>
           )}
@@ -593,7 +596,7 @@ export default function Home() {
                   setDataSource("foursquare");
                 }}
                   className={`chip ${dataSource === "foursquare" ? "active-accent" : ""}`}
-                  style={dataSource === "foursquare" ? { background: "#3333ff", color: "white", borderColor: "#3333ff" } : {}}>
+                  style={dataSource === "foursquare" ? { background: FOURSQUARE_COLOR, color: "white", borderColor: FOURSQUARE_COLOR } : {}}>
                   <Zap className="w-3.5 h-3.5" /> Foursquare
                   {foursquareKey.trim()
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
@@ -760,7 +763,7 @@ export default function Home() {
                 <span className="bg-secondary text-foreground px-2.5 py-1 rounded-full font-semibold">{selectedDining?.icon} {selectedDining?.label}</span>
                 <span className="bg-secondary text-foreground px-2.5 py-1 rounded-full font-semibold">{selectedGenre?.icon} {selectedGenre?.label}</span>
                 <span className={`px-2.5 py-1 rounded-full font-semibold ${dataSource === "google" ? "google-badge" : dataSource === "yelp" ? "yelp-badge" : dataSource === "foursquare" ? "" : "osm-badge"}`}
-                  style={dataSource === "foursquare" ? { background: "#3333ff", color: "white" } : {}}>
+                  style={dataSource === "foursquare" ? { background: FOURSQUARE_COLOR, color: "white" } : {}}>
                   {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : dataSource === "foursquare" ? "Foursquare" : "OSM"}
                 </span>
               </div>
@@ -805,7 +808,7 @@ export default function Home() {
           {" · "}
           <a href="https://developers.google.com/maps" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#4285f4" }}>Google Maps</a>
           {" · "}
-          <a href="https://foursquare.com/developers" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#3333ff" }}>Foursquare</a>
+          <a href="https://foursquare.com/developers" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: FOURSQUARE_COLOR }}>Foursquare</a>
         </p>
       </footer>
     </div>
