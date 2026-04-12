@@ -94,7 +94,16 @@ The app runs **entirely in your browser** — no backend server required:
 
 ## Deployment
 
-The app automatically deploys to GitHub Pages when you push to `main` via the `.github/workflows/deploy.yml` workflow.
+The app automatically deploys to GitHub Pages when you push to `main` via the `.github/workflows/deploy.yml` workflow. The workflow builds the static site and pushes it to the `gh-pages` branch.
+
+### First-Time Setup
+
+1. Go to **Settings → Pages** in your repository
+2. Under **Source**, select **Deploy from a branch**
+3. Choose the `gh-pages` branch and `/ (root)` folder, then click **Save**
+4. Push to `main` (or re-run the workflow) — your site will be live at `https://<username>.github.io/<repo>/`
+
+> **Note:** GitHub Pages for private repositories requires a paid plan (Pro, Team, or Enterprise). If on a free plan, the repository must be public.
 
 To deploy manually or to another host, just build and upload the `dist/public/` folder.
 
