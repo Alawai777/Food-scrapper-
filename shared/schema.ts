@@ -41,25 +41,25 @@ export const CITY_BBOXES: Record<string, [number, number, number, number]> = {
 export const METRO_DETROIT_CITIES = Object.keys(CITY_BBOXES);
 
 export const CUISINE_GENRES = [
-  { id: "any",            label: "Any Food",       icon: "🍽️", osm: "",                                                                                       yelp: "",                                              google: "" },
-  { id: "middle_eastern", label: "Middle Eastern",  icon: "🧆", osm: "middle_eastern|arabic|lebanese|turkish|persian|iranian|syrian|iraqi|jordanian|yemeni",   yelp: "mideastern,arabic,lebanese,turkish,persian",    google: "middle eastern restaurant" },
-  { id: "american",       label: "American",        icon: "🍔", osm: "american|burger|hot_dog|chicken|diner|steak",                                           yelp: "newamerican,tradamerican,burgers",              google: "american restaurant" },
-  { id: "italian",        label: "Italian",         icon: "🍝", osm: "italian|pasta",                                                                          yelp: "italian",                                       google: "italian restaurant" },
-  { id: "mexican",        label: "Mexican",         icon: "🌮", osm: "mexican|tex-mex|tacos",                                                                  yelp: "mexican,tex-mex",                               google: "mexican restaurant" },
-  { id: "asian",          label: "Asian",           icon: "🍜", osm: "chinese|japanese|korean|thai|vietnamese|sushi|ramen|asian",                               yelp: "asianfusion,chinese,japanese,korean,thai,vietnamese", google: "asian restaurant" },
-  { id: "pizza",          label: "Pizza",           icon: "🍕", osm: "pizza",                                                                                  yelp: "pizza",                                         google: "pizza" },
-  { id: "seafood",        label: "Seafood",         icon: "🦞", osm: "seafood|fish|fish_and_chips",                                                            yelp: "seafood",                                       google: "seafood restaurant" },
-  { id: "mediterranean",  label: "Mediterranean",   icon: "🥙", osm: "mediterranean|greek",                                                                    yelp: "mediterranean,greek",                           google: "mediterranean restaurant" },
-  { id: "indian",         label: "Indian",          icon: "🍛", osm: "indian|pakistani",                                                                       yelp: "indpak",                                        google: "indian restaurant" },
-  { id: "bbq",            label: "BBQ",             icon: "🍖", osm: "barbecue|bbq",                                                                           yelp: "bbq",                                           google: "bbq" },
-  { id: "breakfast",      label: "Breakfast",       icon: "🍳", osm: "breakfast|brunch",                                                                        yelp: "breakfast_brunch",                              google: "breakfast restaurant" },
-  { id: "desserts",       label: "Desserts",        icon: "🧁", osm: "ice_cream|dessert|cake|bakery|donut",                                                    yelp: "desserts,icecream,bakeries",                    google: "dessert" },
+  { id: "any",            label: "Any Food",       icon: "🍽️", osm: "",                                                                                       yelp: "",                                              google: "",                            foursquare: "" },
+  { id: "middle_eastern", label: "Middle Eastern",  icon: "🧆", osm: "middle_eastern|arabic|lebanese|turkish|persian|iranian|syrian|iraqi|jordanian|yemeni",   yelp: "mideastern,arabic,lebanese,turkish,persian",    google: "middle eastern restaurant",   foursquare: "13068,13057,13070,13066" },
+  { id: "american",       label: "American",        icon: "🍔", osm: "american|burger|hot_dog|chicken|diner|steak",                                           yelp: "newamerican,tradamerican,burgers",              google: "american restaurant",         foursquare: "13064,13031" },
+  { id: "italian",        label: "Italian",         icon: "🍝", osm: "italian|pasta",                                                                          yelp: "italian",                                       google: "italian restaurant",          foursquare: "13236" },
+  { id: "mexican",        label: "Mexican",         icon: "🌮", osm: "mexican|tex-mex|tacos",                                                                  yelp: "mexican,tex-mex",                               google: "mexican restaurant",          foursquare: "13303" },
+  { id: "asian",          label: "Asian",           icon: "🍜", osm: "chinese|japanese|korean|thai|vietnamese|sushi|ramen|asian",                               yelp: "asianfusion,chinese,japanese,korean,thai,vietnamese", google: "asian restaurant",      foursquare: "13072,13099,13263,13352,13369" },
+  { id: "pizza",          label: "Pizza",           icon: "🍕", osm: "pizza",                                                                                  yelp: "pizza",                                         google: "pizza",                       foursquare: "13064" },
+  { id: "seafood",        label: "Seafood",         icon: "🦞", osm: "seafood|fish|fish_and_chips",                                                            yelp: "seafood",                                       google: "seafood restaurant",          foursquare: "13338" },
+  { id: "mediterranean",  label: "Mediterranean",   icon: "🥙", osm: "mediterranean|greek",                                                                    yelp: "mediterranean,greek",                           google: "mediterranean restaurant",    foursquare: "13302,13132" },
+  { id: "indian",         label: "Indian",          icon: "🍛", osm: "indian|pakistani",                                                                       yelp: "indpak",                                        google: "indian restaurant",           foursquare: "13199" },
+  { id: "bbq",            label: "BBQ",             icon: "🍖", osm: "barbecue|bbq",                                                                           yelp: "bbq",                                           google: "bbq",                         foursquare: "13028" },
+  { id: "breakfast",      label: "Breakfast",       icon: "🍳", osm: "breakfast|brunch",                                                                        yelp: "breakfast_brunch",                              google: "breakfast restaurant",        foursquare: "13026,13027" },
+  { id: "desserts",       label: "Desserts",        icon: "🧁", osm: "ice_cream|dessert|cake|bakery|donut",                                                    yelp: "desserts,icecream,bakeries",                    google: "dessert",                     foursquare: "13040,13001" },
 ];
 
 export const DINING_STYLES = [
-  { id: "restaurants", label: "Dine In",    icon: "🍽️", osm: ["restaurant"],                 yelp: "restaurants",  google: "restaurant" },
-  { id: "order_food",  label: "Pick Up",    icon: "🥡", osm: ["fast_food", "restaurant"],    yelp: "food",         google: "restaurant" },
-  { id: "food_trucks", label: "Food Truck", icon: "🚚", osm: ["food_truck", "fast_food"],    yelp: "foodtrucks",   google: "restaurant" },
+  { id: "restaurants", label: "Dine In",    icon: "🍽️", osm: ["restaurant"],                 yelp: "restaurants",  google: "restaurant",  foursquare: "13065" },
+  { id: "order_food",  label: "Pick Up",    icon: "🥡", osm: ["fast_food", "restaurant"],    yelp: "food",         google: "restaurant",  foursquare: "13145" },
+  { id: "food_trucks", label: "Food Truck", icon: "🚚", osm: ["food_truck", "fast_food"],    yelp: "foodtrucks",   google: "restaurant",  foursquare: "13134" },
 ];
 
 export const PRICE_RANGES = [
@@ -70,7 +70,8 @@ export const PRICE_RANGES = [
 ];
 
 export const SORT_OPTIONS = [
-  { id: "name",     label: "Name" },
-  { id: "rating",   label: "Rating" },
-  { id: "distance", label: "Distance" },
+  { id: "name",        label: "Name" },
+  { id: "rating",      label: "Rating" },
+  { id: "distance",    label: "Distance" },
+  { id: "hidden_gems", label: "Hidden Gems 💎" },
 ];

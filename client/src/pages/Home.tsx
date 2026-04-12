@@ -5,6 +5,7 @@ import {
   searchRestaurants,
   validateYelpKey,
   validateGoogleKey,
+  validateFoursquareKey,
   type Restaurant,
   type SearchResult,
 } from "@/lib/api";
@@ -64,14 +65,25 @@ function OpenBadge({ isOpen }: { isOpen: boolean | null }) {
 function SourceBadge({ source }: { source: string }) {
   if (source === "yelp") return <span className="yelp-badge">Yelp</span>;
   if (source === "google") return <span className="google-badge">Google</span>;
+  if (source === "foursquare") return <span className="foursquare-badge" style={{ background: "#3333ff", color: "white", fontSize: "0.65rem", fontWeight: 700, padding: "2px 8px", borderRadius: "9999px" }}>Foursquare</span>;
   return <span className="osm-badge">OSM</span>;
+}
+function HiddenGemBadge({ score }: { score?: number }) {
+  if (!score || score < 50) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full"
+      style={{ background: "linear-gradient(135deg, #f59e0b, #ef4444)", color: "white" }}>
+      💎 {score >= 70 ? "Hidden Gem" : "Local Pick"}
+    </span>
+  );
 }
 
 // ── Restaurant Card ───────────────────────────────────────────────────────────
 function RestaurantCard({ r }: { r: Restaurant }) {
   const isYelp = r.source === "yelp";
   const isGoogle = r.source === "google";
-  const hasRichData = isYelp || isGoogle;
+  const isFoursquare = r.source === "foursquare";
+  const hasRichData = isYelp || isGoogle || isFoursquare;
   const amenityLabel: Record<string, string> = {
     restaurant: "🍽️ Dine In", fast_food: "🥡 Pick Up",
     food_truck: "🚚 Food Truck", cafe: "☕ Café",
@@ -97,6 +109,7 @@ function RestaurantCard({ r }: { r: Restaurant }) {
           {r.price && <span className="text-xs font-bold bg-black/70 text-white px-2 py-0.5 rounded-full">{r.price}</span>}
           {r.isHalal && <HalalBadge />}
           {r.isVegetarian && <VegBadge />}
+          <HiddenGemBadge score={r.hiddenGemScore} />
         </div>
         <div className="absolute top-2 right-2 flex gap-1">
           <OpenBadge isOpen={r.isOpen} />
@@ -175,6 +188,12 @@ function RestaurantCard({ r }: { r: Restaurant }) {
             <a href={r.googleMapsUrl} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: "#4285f4" }}>
               <ExternalLink className="w-3 h-3" /> Google
+            </a>
+          )}
+          {isFoursquare && r.foursquareUrl && (
+            <a href={r.foursquareUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: "#3333ff" }}>
+              <ExternalLink className="w-3 h-3" /> Foursquare
             </a>
           )}
           <span className="ml-auto"><SourceBadge source={r.source} /></span>
@@ -258,15 +277,19 @@ function ApiKeyInput({
 // ── Settings Panel ────────────────────────────────────────────────────────────
 function SettingsPanel({
   open, onClose, yelpKey, setYelpKey, googleKey, setGoogleKey,
+  foursquareKey, setFoursquareKey,
 }: {
   open: boolean; onClose: () => void;
   yelpKey: string; setYelpKey: (k: string) => void;
   googleKey: string; setGoogleKey: (k: string) => void;
+  foursquareKey: string; setFoursquareKey: (k: string) => void;
 }) {
   const [yelpTesting, setYelpTesting] = useState(false);
   const [yelpStatus, setYelpStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [googleTesting, setGoogleTesting] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<"idle" | "valid" | "invalid">("idle");
+  const [foursquareTesting, setFoursquareTesting] = useState(false);
+  const [foursquareStatus, setFoursquareStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const { toast } = useToast();
 
   const testYelpKey = async () => {
@@ -299,6 +322,22 @@ function SettingsPanel({
       }
     } catch { setGoogleStatus("invalid"); }
     setGoogleTesting(false);
+  };
+
+  const testFoursquareKey = async () => {
+    if (!foursquareKey.trim()) return;
+    setFoursquareTesting(true); setFoursquareStatus("idle");
+    try {
+      const data = await validateFoursquareKey(foursquareKey.trim());
+      if (data.valid) {
+        setFoursquareStatus("valid");
+        toast({ title: "Foursquare key is valid", description: "You can now search with Foursquare data." });
+      } else {
+        setFoursquareStatus("invalid");
+        toast({ title: "Invalid Foursquare key", description: data.error || "Check your key.", variant: "destructive" });
+      }
+    } catch { setFoursquareStatus("invalid"); }
+    setFoursquareTesting(false);
   };
 
   if (!open) return null;
@@ -349,6 +388,23 @@ function SettingsPanel({
           testId="input-yelp-key"
         />
 
+        <div className="border-t border-border" />
+
+        {/* Foursquare key */}
+        <ApiKeyInput
+          label="Foursquare Places API Key"
+          helpText="Great for finding hidden gems and long-tail local spots. Free tier available."
+          helpUrl="https://foursquare.com/developers/signup"
+          helpLinkText="foursquare.com/developers"
+          placeholder="Paste your Foursquare API key…"
+          value={foursquareKey}
+          onChange={v => { setFoursquareKey(v); setFoursquareStatus("idle"); }}
+          onTest={testFoursquareKey}
+          testing={foursquareTesting}
+          status={foursquareStatus}
+          testId="input-foursquare-key"
+        />
+
         <div className="pt-2 border-t border-border">
           <p className="text-xs text-muted-foreground">
             Without API keys, YartedEats uses <strong>OpenStreetMap</strong> (free, no key needed).
@@ -380,9 +436,10 @@ export default function Home() {
   const [locating, setLocating]     = useState(false);
 
   // Data source
-  const [dataSource, setDataSource] = useState<"osm" | "yelp" | "google">("osm");
+  const [dataSource, setDataSource] = useState<"osm" | "yelp" | "google" | "foursquare">("osm");
   const [yelpKey, setYelpKey]       = useState("");
   const [googleKey, setGoogleKey]   = useState("");
+  const [foursquareKey, setFoursquareKey] = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
   // Results
@@ -414,6 +471,7 @@ export default function Home() {
         dataSource,
         yelpApiKey: dataSource === "yelp" ? yelpKey.trim() : undefined,
         googleApiKey: dataSource === "google" ? googleKey.trim() : undefined,
+        foursquareApiKey: dataSource === "foursquare" ? foursquareKey.trim() : undefined,
       });
     },
     onSuccess: (data: SearchResult) => {
@@ -437,7 +495,8 @@ export default function Home() {
       {/* Settings modal */}
       <SettingsPanel open={showSettings} onClose={() => setShowSettings(false)}
         yelpKey={yelpKey} setYelpKey={setYelpKey}
-        googleKey={googleKey} setGoogleKey={setGoogleKey} />
+        googleKey={googleKey} setGoogleKey={setGoogleKey}
+        foursquareKey={foursquareKey} setFoursquareKey={setFoursquareKey} />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-40">
@@ -487,7 +546,7 @@ export default function Home() {
             Find Your Next Meal<br />in Metro Detroit
           </h1>
           <p className="text-white/75 text-sm">
-            Dine In · Pick Up · Food Trucks · Halal · <strong>OpenStreetMap</strong> · <strong>Yelp</strong> · <strong>Google Maps</strong>
+            Dine In · Pick Up · Food Trucks · Halal · <strong>OpenStreetMap</strong> · <strong>Yelp</strong> · <strong>Google Maps</strong> · <strong>Foursquare</strong> · 💎 Hidden Gems
           </p>
         </div>
       </div>
@@ -525,6 +584,18 @@ export default function Home() {
                   className={`chip ${dataSource === "google" ? "active-google" : ""}`}>
                   <MapPin className="w-3.5 h-3.5" /> Google Maps
                   {googleKey.trim()
+                    ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
+                    : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
+                  }
+                </button>
+                <button data-testid="chip-source-foursquare" onClick={() => {
+                  if (!foursquareKey.trim()) { setShowSettings(true); return; }
+                  setDataSource("foursquare");
+                }}
+                  className={`chip ${dataSource === "foursquare" ? "active-accent" : ""}`}
+                  style={dataSource === "foursquare" ? { background: "#3333ff", color: "white", borderColor: "#3333ff" } : {}}>
+                  <Zap className="w-3.5 h-3.5" /> Foursquare
+                  {foursquareKey.trim()
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
                     : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
                   }
@@ -638,7 +709,7 @@ export default function Home() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Searching {dataSource === "google" ? "Google Maps" : dataSource === "yelp" ? "Yelp" : "OpenStreetMap"}…
+                  Searching {dataSource === "google" ? "Google Maps" : dataSource === "yelp" ? "Yelp" : dataSource === "foursquare" ? "Foursquare" : "OpenStreetMap"}…
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
@@ -646,7 +717,7 @@ export default function Home() {
                   Find {selectedDining?.icon} {selectedDining?.label} · {selectedGenre?.icon} {selectedGenre?.label}
                   {halal && " · ☪️ Halal"}
                   {openNow && " · Open Now"}
-                  <span className="opacity-60 ml-1 text-xs">via {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : "OSM"}</span>
+                  <span className="opacity-60 ml-1 text-xs">via {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : dataSource === "foursquare" ? "Foursquare" : "OSM"}</span>
                 </span>
               )}
             </Button>
@@ -688,8 +759,9 @@ export default function Home() {
                 {openNow && <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2.5 py-1 rounded-full font-semibold">🟢 Open Now</span>}
                 <span className="bg-secondary text-foreground px-2.5 py-1 rounded-full font-semibold">{selectedDining?.icon} {selectedDining?.label}</span>
                 <span className="bg-secondary text-foreground px-2.5 py-1 rounded-full font-semibold">{selectedGenre?.icon} {selectedGenre?.label}</span>
-                <span className={`px-2.5 py-1 rounded-full font-semibold ${dataSource === "google" ? "google-badge" : dataSource === "yelp" ? "yelp-badge" : "osm-badge"}`}>
-                  {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : "OSM"}
+                <span className={`px-2.5 py-1 rounded-full font-semibold ${dataSource === "google" ? "google-badge" : dataSource === "yelp" ? "yelp-badge" : dataSource === "foursquare" ? "" : "osm-badge"}`}
+                  style={dataSource === "foursquare" ? { background: "#3333ff", color: "white" } : {}}>
+                  {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : dataSource === "foursquare" ? "Foursquare" : "OSM"}
                 </span>
               </div>
             </div>
@@ -732,6 +804,8 @@ export default function Home() {
           <a href="https://www.yelp.com/developers" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#d32323" }}>Yelp</a>
           {" · "}
           <a href="https://developers.google.com/maps" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#4285f4" }}>Google Maps</a>
+          {" · "}
+          <a href="https://foursquare.com/developers" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#3333ff" }}>Foursquare</a>
         </p>
       </footer>
     </div>

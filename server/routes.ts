@@ -7,6 +7,7 @@ import { CITY_BBOXES, CUISINE_GENRES, DINING_STYLES } from "@shared/schema";
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const YELP_BASE   = "https://api.yelp.com/v3";
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
+const FOURSQUARE_BASE = "https://api.foursquare.com/v3";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SHARED TYPES
@@ -30,12 +31,14 @@ interface Restaurant {
   distance: string;
   imageUrl: string;
   mapsLink: string;
-  source: "osm" | "yelp" | "google";
+  source: "osm" | "yelp" | "google" | "foursquare";
   rating: number;
   reviewCount: number;
   price: string;
   yelpUrl: string;
   googleMapsUrl?: string;
+  foursquareUrl?: string;
+  hiddenGemScore?: number;
 }
 
 interface SearchParams {
@@ -52,6 +55,7 @@ interface SearchParams {
   dataSource?: string;
   yelpApiKey?: string;
   googleApiKey?: string;
+  foursquareApiKey?: string;
 }
 
 interface OsmElement {
@@ -524,6 +528,193 @@ async function searchGoogle(params: SearchParams, apiKey: string): Promise<Resta
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// FOURSQUARE PLACES API — requires API key, good long-tail local coverage
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface FoursquareVenue {
+  fsq_id: string;
+  name: string;
+  categories?: Array<{ id: number; name: string; short_name: string }>;
+  location?: {
+    formatted_address?: string;
+    address?: string;
+    locality?: string;
+    region?: string;
+    postcode?: string;
+    cross_street?: string;
+    country?: string;
+  };
+  geocodes?: { main?: { latitude: number; longitude: number } };
+  distance?: number;
+  tel?: string;
+  website?: string;
+  hours?: { display?: string; open_now?: boolean };
+  rating?: number;        // 0-10 scale
+  stats?: { total_ratings?: number; total_tips?: number };
+  price?: number;         // 1-4
+  photos?: Array<{ prefix: string; suffix: string }>;
+  link?: string;
+  menu?: { url?: string };
+  tastes?: string[];
+  description?: string;
+}
+
+const FOURSQUARE_PRICE_MAP: Record<number, string> = {
+  1: "$", 2: "$$", 3: "$$$", 4: "$$$$",
+};
+
+async function searchFoursquare(params: SearchParams, apiKey: string): Promise<Restaurant[]> {
+  const { city, genre, diningStyle, halal, priceRange, openNow, sortBy, userLat, userLon } = params;
+
+  const genreConfig  = CUISINE_GENRES.find(g => g.id === genre);
+  const bbox = CITY_BBOXES[city];
+  if (!bbox) throw new Error("Unknown city");
+
+  const centerLat = (bbox[0] + bbox[2]) / 2;
+  const centerLon = (bbox[1] + bbox[3]) / 2;
+
+  // Build query text
+  const cuisineText = halal ? "halal" : "";
+  const queryParts = [cuisineText, genreConfig?.label || "", "restaurant"].filter(Boolean);
+  const query = queryParts.join(" ");
+
+  const fsqParams: Record<string, string> = {
+    query,
+    ll: `${centerLat},${centerLon}`,
+    radius: "12000", // ~7.5 miles
+    limit: "30",
+    sort: sortBy === "distance" ? "DISTANCE" : sortBy === "rating" ? "RATING" : "RELEVANCE",
+  };
+
+  // Add category filter if available
+  const categories = genreConfig?.foursquare;
+  if (categories) {
+    fsqParams.categories = categories;
+  }
+
+  // Price filter
+  if (priceRange && priceRange !== "all") {
+    const minPrice = Math.min(...priceRange.split(",").map(Number));
+    const maxPrice = Math.max(...priceRange.split(",").map(Number));
+    fsqParams.min_price = String(minPrice);
+    fsqParams.max_price = String(maxPrice);
+  }
+
+  // Open now
+  if (openNow) {
+    fsqParams.open_now = "true";
+  }
+
+  const fields = [
+    "fsq_id", "name", "categories", "location", "geocodes", "distance",
+    "tel", "website", "hours", "rating", "stats", "price", "photos",
+    "link", "tastes", "description",
+  ].join(",");
+
+  const qs = new URLSearchParams(fsqParams).toString();
+  const response = await axios.get(`${FOURSQUARE_BASE}/places/search?${qs}`, {
+    headers: {
+      Authorization: apiKey,
+      Accept: "application/json",
+    },
+    params: { fields },
+    timeout: 15000,
+  });
+
+  const refLat = userLat ? Number(userLat) : centerLat;
+  const refLon = userLon ? Number(userLon) : centerLon;
+
+  return (response.data.results || []).map((v: FoursquareVenue): Restaurant => {
+    const lat = v.geocodes?.main?.latitude || 0;
+    const lon = v.geocodes?.main?.longitude || 0;
+    const catNames = v.categories?.map(c => c.name) || [];
+
+    const isHalal = halal ||
+      catNames.some(c => c.toLowerCase().includes("halal")) ||
+      (v.name || "").toLowerCase().includes("halal") ||
+      (v.tastes || []).some(t => t.toLowerCase().includes("halal"));
+
+    const distance = formatDistance(lat, lon, refLat, refLon);
+
+    const mapsLink = lat && lon
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.name)}+${lat},${lon}`
+      : "";
+
+    // Photo URL
+    let imageUrl = "";
+    if (v.photos && v.photos.length > 0) {
+      imageUrl = `${v.photos[0].prefix}300x200${v.photos[0].suffix}`;
+    }
+
+    // Rating: Foursquare uses 0-10, normalize to 0-5
+    const rating = v.rating ? Math.round((v.rating / 2) * 10) / 10 : 0;
+
+    const addressParts = [v.location?.address, v.location?.locality, v.location?.region].filter(Boolean);
+
+    return {
+      id: v.fsq_id,
+      name: v.name,
+      cuisine: catNames.join(", "),
+      amenity: "",
+      address: v.location?.formatted_address || addressParts.join(", "),
+      phone: v.tel || "",
+      website: v.website || "",
+      openingHours: v.hours?.display || "",
+      isOpen: v.hours?.open_now ?? null,
+      isHalal,
+      isVegetarian: catNames.some(c => c.toLowerCase().includes("vegetarian")),
+      isVegan: catNames.some(c => c.toLowerCase().includes("vegan")),
+      lat, lon, distance,
+      imageUrl,
+      mapsLink,
+      source: "foursquare" as const,
+      rating,
+      reviewCount: v.stats?.total_ratings || v.stats?.total_tips || 0,
+      price: v.price ? (FOURSQUARE_PRICE_MAP[v.price] || "") : "",
+      yelpUrl: "",
+      foursquareUrl: v.link || `https://foursquare.com/v/${v.fsq_id}`,
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HIDDEN GEM SCORING — "high rating + low review count" heuristic
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function computeHiddenGemScore(r: Restaurant): number {
+  // Score formula:
+  // - High rating (4.0+ on 5-point scale) gives positive signal
+  // - Low review count (under ~50) boosts the score (it's "undiscovered")
+  // - Having a halal badge or dietary info gives a small boost (niche)
+  // Score range: roughly 0-100
+
+  if (r.rating <= 0) return 0; // No rating = can't score
+
+  // Rating component (0-50): linear scale, bonus for 4.0+
+  const ratingScore = Math.min(50, (r.rating / 5) * 40 + (r.rating >= 4.0 ? 10 : 0));
+
+  // Obscurity component (0-40): fewer reviews = more "hidden"
+  // Peak at 0 reviews, decays as reviews increase
+  const reviewPenalty = Math.min(r.reviewCount, 200);
+  const obscurityScore = Math.max(0, 40 * (1 - reviewPenalty / 200));
+
+  // Niche/dietary bonus (0-10)
+  let nicheBonus = 0;
+  if (r.isHalal) nicheBonus += 4;
+  if (r.isVegetarian) nicheBonus += 3;
+  if (r.isVegan) nicheBonus += 3;
+
+  return Math.round(ratingScore + obscurityScore + nicheBonus);
+}
+
+function applyHiddenGemScores(results: Restaurant[]): Restaurant[] {
+  return results.map(r => ({
+    ...r,
+    hiddenGemScore: computeHiddenGemScore(r),
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ROUTES
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -532,19 +723,20 @@ let lastGoogleApiKey = "";
 
 export function registerRoutes(httpServer: Server, app: Express) {
 
-  // Main search — supports OSM, Yelp, and Google
+  // Main search — supports OSM, Yelp, Google, and Foursquare
   app.post("/api/search", async (req, res) => {
     const { city, genre, diningStyle, groupSize, priceRange, halal, openNow,
-            sortBy, userLat, userLon, dataSource, yelpApiKey, googleApiKey } = req.body;
+            sortBy, userLat, userLon, dataSource, yelpApiKey, googleApiKey, foursquareApiKey } = req.body;
 
     if (!city || !genre || !diningStyle) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const source = ["osm", "yelp", "google"].includes(dataSource) ? dataSource : "osm";
+    const source = ["osm", "yelp", "google", "foursquare"].includes(dataSource) ? dataSource : "osm";
     // Resolve keys: request body > server env var
-    const resolvedYelpKey   = yelpApiKey   || process.env.YELP_API_KEY   || "";
-    const resolvedGoogleKey = googleApiKey || process.env.GOOGLE_MAPS_API_KEY || "";
+    const resolvedYelpKey        = yelpApiKey        || process.env.YELP_API_KEY        || "";
+    const resolvedGoogleKey      = googleApiKey      || process.env.GOOGLE_MAPS_API_KEY || "";
+    const resolvedFoursquareKey  = foursquareApiKey  || process.env.FOURSQUARE_API_KEY  || "";
 
     // Store for photo proxy
     if (resolvedGoogleKey) lastGoogleApiKey = resolvedGoogleKey;
@@ -568,8 +760,22 @@ export function registerRoutes(httpServer: Server, app: Express) {
           });
         }
         results = await searchGoogle(req.body, resolvedGoogleKey);
+      } else if (source === "foursquare") {
+        if (!resolvedFoursquareKey) {
+          return res.status(400).json({
+            error: "Foursquare API key is required. Paste it in Settings or set FOURSQUARE_API_KEY env variable.",
+            results: [],
+          });
+        }
+        results = await searchFoursquare(req.body, resolvedFoursquareKey);
       } else {
         results = await searchOverpass(req.body);
+      }
+
+      // Apply hidden gem scores and sort if requested
+      results = applyHiddenGemScores(results);
+      if (sortBy === "hidden_gems") {
+        results.sort((a, b) => (b.hiddenGemScore || 0) - (a.hiddenGemScore || 0));
       }
 
       // Save search
@@ -601,10 +807,17 @@ export function registerRoutes(httpServer: Server, app: Express) {
       if (source === "google" && axiosErr?.response?.status === 429) {
         return res.status(429).json({ error: "Google API rate limit reached. Try again later.", results: [] });
       }
+      if (source === "foursquare" && axiosErr?.response?.status === 401) {
+        return res.status(401).json({ error: "Invalid Foursquare API key. Check your key and try again.", results: [] });
+      }
+      if (source === "foursquare" && axiosErr?.response?.status === 429) {
+        return res.status(429).json({ error: "Foursquare rate limit reached. Try again later.", results: [] });
+      }
 
       const errorMessages: Record<string, string> = {
         yelp: "Yelp API error. Check your key or switch to OpenStreetMap.",
         google: "Google Places API error. Check your key or switch to OpenStreetMap.",
+        foursquare: "Foursquare API error. Check your key or switch to OpenStreetMap.",
         osm: "Could not fetch data from OpenStreetMap. Try again in a moment.",
       };
       res.status(500).json({ error: errorMessages[source] || "Search error.", results: [] });
@@ -653,6 +866,31 @@ export function registerRoutes(httpServer: Server, app: Express) {
       const status = axiosErr?.response?.status;
       const msg = status === 403 ? "API key invalid or Places API (New) not enabled" :
                   status === 400 ? "Places API not enabled for this key" :
+                  "Connection error";
+      res.json({ valid: false, error: msg });
+    }
+  });
+
+  // Validate Foursquare API key
+  app.post("/api/validate-foursquare-key", async (req, res) => {
+    const { foursquareApiKey } = req.body;
+    if (!foursquareApiKey) return res.json({ valid: false, error: "No key provided" });
+
+    try {
+      await axios.get(`${FOURSQUARE_BASE}/places/search`, {
+        headers: {
+          Authorization: foursquareApiKey,
+          Accept: "application/json",
+        },
+        params: { query: "restaurant", ll: "42.32,-83.18", limit: 1 },
+        timeout: 8000,
+      });
+      res.json({ valid: true });
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number } };
+      const status = axiosErr?.response?.status;
+      const msg = status === 401 ? "Invalid API key" :
+                  status === 403 ? "API key does not have required permissions" :
                   "Connection error";
       res.json({ valid: false, error: msg });
     }

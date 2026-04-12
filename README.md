@@ -1,6 +1,6 @@
 # YartedEats 🍽️
 
-A Metro Detroit restaurant discovery web app that aggregates data from **OpenStreetMap**, **Yelp**, and **Google Maps** to help you find your next meal.
+A Metro Detroit restaurant discovery web app that aggregates data from **OpenStreetMap**, **Yelp**, **Google Maps**, and **Foursquare** to help you find your next meal — including **hidden gems** 💎.
 
 ## 🌐 Use It Now — No Install Required
 
@@ -20,7 +20,8 @@ Once added, it launches full-screen like a native app — no App Store needed.
 
 ## Features
 
-- **Multi-source search** — Query restaurants from OpenStreetMap (free), Yelp Fusion API, or Google Maps Places API
+- **Multi-source search** — Query restaurants from OpenStreetMap (free), Yelp Fusion API, Google Maps Places API, or Foursquare Places API
+- **Hidden Gem Discovery** 💎 — Smart scoring algorithm ranks restaurants by "high rating + low review count + niche appeal" to surface undiscovered local favorites
 - **Rich filtering** — City/neighborhood, cuisine genre, dining style (dine-in/pickup/food trucks), group size, price range, halal-only, and open-now
 - **15 Metro Detroit cities** — Dearborn, Detroit, Ann Arbor, Troy, and more
 - **13 cuisine genres** — Middle Eastern, American, Italian, Mexican, Asian, Pizza, Seafood, Mediterranean, Indian, BBQ, Breakfast, Desserts
@@ -32,7 +33,7 @@ Once added, it launches full-screen like a native app — no App Store needed.
 ## Tech Stack
 
 - **Frontend**: React 18, TypeScript, Tailwind CSS, shadcn/ui, Wouter, TanStack Query
-- **APIs**: OpenStreetMap Overpass (free, no key), Yelp Fusion v3, Google Maps Places (New)
+- **APIs**: OpenStreetMap Overpass (free, no key), Yelp Fusion v3, Google Maps Places (New), Foursquare Places v3
 - **Build**: Vite
 - **Hosting**: GitHub Pages (auto-deployed on push to `main`)
 - **PWA**: Service worker + web app manifest for iOS/Android installability
@@ -78,6 +79,7 @@ YartedEats works out of the box with **OpenStreetMap** (no API key needed). For 
 
 - **Yelp Fusion API** — Get a free key at [yelp.com/developers](https://www.yelp.com/developers/v3/manage_app)
 - **Google Maps Places API** — Get a key at [Google Cloud Console](https://console.cloud.google.com/apis/credentials) ($200/mo free credit)
+- **Foursquare Places API** — Get a free key at [foursquare.com/developers](https://foursquare.com/developers/signup) (great for hidden gems and long-tail local spots)
 
 Enter your keys in the ⚙️ Settings panel within the app. Keys are stored in your browser only.
 
@@ -90,7 +92,9 @@ The app runs **entirely in your browser** — no backend server required:
 1. **OpenStreetMap** searches go directly to the [Overpass API](https://overpass-api.de/) (free, full CORS support)
 2. **Google Maps** searches go directly to the [Places API](https://developers.google.com/maps/documentation/places/web-service) (supports CORS with your API key)
 3. **Yelp** searches use a CORS proxy since Yelp's API doesn't support browser requests
-4. Search history is saved in **localStorage** (stays on your device)
+4. **Foursquare** searches go directly to the [Places API](https://docs.foursquare.com/developer/reference/place-search) (supports CORS with your API key)
+5. **Hidden Gem scoring** ranks every result by: high rating (0–50 pts) + low review count / obscurity (0–40 pts) + niche dietary appeal (0–10 pts)
+6. Search history is saved in **localStorage** (stays on your device)
 
 ## Deployment
 
