@@ -527,24 +527,30 @@ export function registerRoutes(httpServer: Server, app: Express) {
     } catch (err: any) {
       console.error(`${source} error:`, err?.response?.data || err.message);
 
-      // Source-specific error handling
-      if (source === "yelp" && err?.response?.status === 401) {
-        return res.status(401).json({ error: "Invalid Yelp API key. Check your key and try again.", results: [] });
+      // Return HTTP 200 with an error field so the client's onSuccess handler
+      // can display the specific message (non-200 responses are thrown by
+      // throwIfResNotOk before the JSON body is read, showing only a generic
+      // "Connection error" to the user).
+      const errMsg = (err?.message || "").toLowerCase();
+      const status = err?.response?.status;
+
+      if (source === "yelp" && status === 401) {
+        return res.json({ error: "Invalid Yelp API key. Check your key and try again.", results: [] });
       }
-      if (source === "yelp" && err?.response?.status === 429) {
-        return res.status(429).json({ error: "Yelp rate limit reached. Try again later or switch to OpenStreetMap.", results: [] });
+      if (source === "yelp" && status === 429) {
+        return res.json({ error: "Yelp rate limit reached. Try again later or switch to OpenStreetMap.", results: [] });
       }
-      if (source === "google" && err?.response?.status === 403) {
-        return res.status(403).json({ error: "Google API key invalid or Places API not enabled. Check your key in Google Cloud Console.", results: [] });
+      if (source === "google" && status === 403) {
+        return res.json({ error: "Google API key invalid or Places API not enabled. Check your key in Google Cloud Console.", results: [] });
       }
-      if (source === "google" && err?.response?.status === 429) {
-        return res.status(429).json({ error: "Google API rate limit reached. Try again later.", results: [] });
+      if (source === "google" && status === 429) {
+        return res.json({ error: "Google API rate limit reached. Try again later.", results: [] });
       }
-      if (source === "osm" && (err?.response?.status === 429 || (err?.message || "").includes("rate limit"))) {
-        return res.status(429).json({ error: "OpenStreetMap is temporarily busy. Please wait a moment and try again.", results: [] });
+      if (source === "osm" && (status === 429 || errMsg.includes("rate limit"))) {
+        return res.json({ error: "OpenStreetMap is temporarily busy. Please wait a moment and try again.", results: [] });
       }
-      if (source === "osm" && (err?.message || "").toLowerCase().includes("timeout")) {
-        return res.status(504).json({ error: "OpenStreetMap query timed out. Try a more specific cuisine or a smaller city.", results: [] });
+      if (source === "osm" && errMsg.includes("timeout")) {
+        return res.json({ error: "OpenStreetMap query timed out. Try a more specific cuisine or a smaller city.", results: [] });
       }
 
       const errorMessages: Record<string, string> = {
@@ -552,7 +558,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
         google: "Google Places API error. Check your key or switch to OpenStreetMap.",
         osm: "Could not fetch data from OpenStreetMap. Try again in a moment.",
       };
-      res.status(500).json({ error: errorMessages[source] || "Search error.", results: [] });
+      res.json({ error: errorMessages[source] || "Search error.", results: [] });
     }
   });
 
