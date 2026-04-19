@@ -539,13 +539,11 @@ export default function Home() {
                 </button>
                 <button data-testid="chip-source-yelp" onClick={() => {
                   if (!yelpKey.trim()) {
-                    if (!hasServerYelpKey) {
-                      setShowSettings(true);
-                      return;
-                    }
                     toast({
                       title: "Yelp selected",
-                      description: "Using server-side Yelp key.",
+                      description: hasServerYelpKey
+                        ? "Using server-side Yelp key in the background."
+                        : "Yelp key can be applied in the background when configured on the server.",
                     });
                   }
                   setDataSource("yelp");
@@ -554,7 +552,7 @@ export default function Home() {
                   <Zap className="w-3.5 h-3.5" /> Yelp
                   {(yelpKey.trim() || hasServerYelpKey)
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
-                    : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
+                    : <span className="text-[10px] font-medium ml-1 opacity-50">background</span>
                   }
                 </button>
                 <button data-testid="chip-source-google" onClick={() => {

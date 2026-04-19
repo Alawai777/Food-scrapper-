@@ -790,21 +790,25 @@ export async function searchRestaurants(
     let results: Restaurant[];
 
     if (dataSource === "yelp") {
-      if (!yelpApiKey?.trim()) {
-        const backendResult = await searchViaBackend(params);
-        if (backendResult) {
-          if (!backendResult.error) {
-            saveSearchHistory({
-              city: params.city,
-              genre: params.genre,
-              diningStyle: params.diningStyle,
-              dataSource,
-              resultCount: backendResult.results.length,
-            });
-          }
+      const trimmedYelpKey = yelpApiKey?.trim();
+      const backendResult = await searchViaBackend(params);
+      if (backendResult) {
+        if (!backendResult.error) {
+          saveSearchHistory({
+            city: params.city,
+            genre: params.genre,
+            diningStyle: params.diningStyle,
+            dataSource,
+            resultCount: backendResult.results.length,
+          });
           return backendResult;
         }
+        if (!trimmedYelpKey) {
+          return backendResult;
+        }
+      }
 
+      if (!trimmedYelpKey) {
         return {
           results: [],
           source: "yelp",
@@ -813,7 +817,9 @@ export async function searchRestaurants(
             "Yelp API key is required. Paste it in Settings.",
         };
       }
-      results = await searchYelp(params, yelpApiKey.trim());
+
+      // Static/no-backend mode fallback (or backend error with a client key available).
+      results = await searchYelp(params, trimmedYelpKey);
     } else if (dataSource === "google") {
       if (!googleApiKey?.trim()) {
         return {
