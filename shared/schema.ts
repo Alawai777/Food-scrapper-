@@ -36,6 +36,8 @@ export const CITY_BBOXES: Record<string, [number, number, number, number]> = {
   "Inkster, MI":          [42.27, -83.35, 42.32, -83.30],
   "Garden City, MI":      [42.32, -83.37, 42.36, -83.33],
   "Allen Park, MI":       [42.25, -83.23, 42.30, -83.18],
+  "Canton Township, MI":  [42.29, -83.57, 42.38, -83.43],
+  "Farmington Hills, MI": [42.46, -83.44, 42.55, -83.30],
 };
 
 export const METRO_DETROIT_CITIES = Object.keys(CITY_BBOXES);
