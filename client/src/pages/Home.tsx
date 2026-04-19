@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useTheme } from "@/components/ThemeProvider";
 import {
   searchRestaurants,
+  getServerKeyStatus,
   validateYelpKey,
   validateGoogleKey,
   type Restaurant,
@@ -393,6 +394,7 @@ export default function Home() {
   // Data source
   const [dataSource, setDataSource] = useState<"osm" | "yelp" | "google">("osm");
   const [googleKey, setGoogleKey]   = useState("");
+  const [hasServerYelpKey, setHasServerYelpKey] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   // Results
@@ -440,6 +442,15 @@ export default function Home() {
 
   const selectedGenre  = CUISINE_GENRES.find(g => g.id === genre);
   const selectedDining = DINING_STYLES.find(d => d.id === diningStyle);
+
+  useEffect(() => {
+    let mounted = true;
+    getServerKeyStatus().then((status) => {
+      if (!mounted || !status) return;
+      setHasServerYelpKey(status.yelpConfigured);
+    });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     try {
@@ -527,17 +538,21 @@ export default function Home() {
                   <span className="text-[10px] opacity-70 font-medium ml-1">(free)</span>
                 </button>
                 <button data-testid="chip-source-yelp" onClick={() => {
-                  if (!yelpKey.trim()) {
+                  if (!yelpKey.trim() && !hasServerYelpKey) {
+                    setShowSettings(true);
+                    return;
+                  }
+                  if (!yelpKey.trim() && hasServerYelpKey) {
                     toast({
                       title: "Yelp selected",
-                      description: "Using server Yelp key if configured. Add your key in Settings if needed.",
+                      description: "Using your server Yelp key automatically.",
                     });
                   }
                   setDataSource("yelp");
                 }}
                   className={`chip ${dataSource === "yelp" ? "active-yelp" : ""}`}>
                   <Zap className="w-3.5 h-3.5" /> Yelp
-                  {yelpKey.trim()
+                  {(yelpKey.trim() || hasServerYelpKey)
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
                     : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
                   }

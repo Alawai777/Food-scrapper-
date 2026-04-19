@@ -66,6 +66,11 @@ export interface SearchResult {
   error?: string;
 }
 
+export interface ServerKeyStatus {
+  yelpConfigured: boolean;
+  googleConfigured: boolean;
+}
+
 // ── Internal types ──────────────────────────────────────────────────────────
 
 interface OsmElement {
@@ -714,6 +719,22 @@ export async function validateGoogleKey(
     return { valid: true };
   } catch {
     return { valid: false, error: "Connection error" };
+  }
+}
+
+export async function getServerKeyStatus(): Promise<ServerKeyStatus | null> {
+  try {
+    const response = await fetch("/api/key-status");
+    if (!response.ok) return null;
+    const data: unknown = await response.json();
+    if (!data || typeof data !== "object") return null;
+    const parsed = data as Partial<ServerKeyStatus>;
+    return {
+      yelpConfigured: Boolean(parsed.yelpConfigured),
+      googleConfigured: Boolean(parsed.googleConfigured),
+    };
+  } catch {
+    return null;
   }
 }
 
