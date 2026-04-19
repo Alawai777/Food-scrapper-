@@ -79,7 +79,7 @@ YartedEats works out of the box with **OpenStreetMap** (no API key needed). For 
 - **Yelp Fusion API** — Get a free key at [yelp.com/developers](https://www.yelp.com/developers/v3/manage_app)
 - **Google Maps Places API** — Get a key at [Google Cloud Console](https://console.cloud.google.com/apis/credentials) ($200/mo free credit)
 
-Enter your keys in the ⚙️ Settings panel within the app. Keys are stored in your browser only.
+Enter your keys in the ⚙️ Settings panel within the app. Keys are used for the current session.
 
 To avoid entering a Yelp key manually, set a build-time environment variable:
 
