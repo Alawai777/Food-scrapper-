@@ -483,9 +483,11 @@ export function registerRoutes(httpServer: Server, app: Express) {
     }
 
     const source = dataSource || "osm";
-    // Resolve keys: request body > server env var
-    const resolvedYelpKey   = yelpApiKey   || process.env.YELP_API_KEY   || "";
-    const resolvedGoogleKey = googleApiKey || process.env.GOOGLE_MAPS_API_KEY || "";
+    // Env vars take priority — if the server has a key, never use the one from
+    // the request body (prevents the key from being transmitted over the network
+    // when it is already securely configured on the server).
+    const resolvedYelpKey   = process.env.YELP_API_KEY   || yelpApiKey   || "";
+    const resolvedGoogleKey = process.env.GOOGLE_MAPS_API_KEY || googleApiKey || "";
 
     try {
       let results: any[];
@@ -605,6 +607,15 @@ export function registerRoutes(httpServer: Server, app: Express) {
                   "Connection error";
       res.json({ valid: false, error: msg });
     }
+  });
+
+  // Tells the client which API keys are already configured server-side.
+  // Returns boolean flags only — the actual key values are never exposed.
+  app.get("/api/server-config", (_req, res) => {
+    res.json({
+      hasYelpKey:   Boolean(process.env.YELP_API_KEY),
+      hasGoogleKey: Boolean(process.env.GOOGLE_MAPS_API_KEY),
+    });
   });
 
   app.get("/api/recent", async (_req, res) => {

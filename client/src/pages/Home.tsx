@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useTheme } from "@/components/ThemeProvider";
 import {
@@ -278,10 +278,12 @@ function ApiKeyInput({
 // ── Settings Panel ────────────────────────────────────────────────────────────
 function SettingsPanel({
   open, onClose, yelpKey, setYelpKey, googleKey, setGoogleKey,
+  serverHasYelp, serverHasGoogle,
 }: {
   open: boolean; onClose: () => void;
   yelpKey: string; setYelpKey: (k: string) => void;
   googleKey: string; setGoogleKey: (k: string) => void;
+  serverHasYelp: boolean; serverHasGoogle: boolean;
 }) {
   const [yelpTesting, setYelpTesting] = useState(false);
   const [yelpStatus, setYelpStatus] = useState<"idle" | "valid" | "invalid">("idle");
@@ -340,36 +342,54 @@ function SettingsPanel({
         </div>
 
         {/* Google Maps key */}
-        <ApiKeyInput
-          label="Google Maps API Key"
-          helpText="Adds photos, ratings, reviews, hours, and price. $200/mo free credit."
-          helpUrl="https://console.cloud.google.com/apis/credentials"
-          helpLinkText="Google Cloud Console"
-          placeholder="Paste your Google Maps API key…"
-          value={googleKey}
-          onChange={v => { setGoogleKey(v); setGoogleStatus("idle"); }}
-          onTest={testGoogleKey}
-          testing={googleTesting}
-          status={googleStatus}
-          testId="input-google-key"
-        />
+        {serverHasGoogle ? (
+          <div className="space-y-1">
+            <p className="label-xs">Google Maps API Key</p>
+            <p className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Configured on server — no key needed here
+            </p>
+          </div>
+        ) : (
+          <ApiKeyInput
+            label="Google Maps API Key"
+            helpText="Adds photos, ratings, reviews, hours, and price. $200/mo free credit."
+            helpUrl="https://console.cloud.google.com/apis/credentials"
+            helpLinkText="Google Cloud Console"
+            placeholder="Paste your Google Maps API key…"
+            value={googleKey}
+            onChange={v => { setGoogleKey(v); setGoogleStatus("idle"); }}
+            onTest={testGoogleKey}
+            testing={googleTesting}
+            status={googleStatus}
+            testId="input-google-key"
+          />
+        )}
 
         <div className="border-t border-border" />
 
         {/* Yelp key */}
-        <ApiKeyInput
-          label="Yelp Fusion API Key"
-          helpText="Adds photos, ratings, reviews, and price to results."
-          helpUrl="https://www.yelp.com/developers/v3/manage_app"
-          helpLinkText="yelp.com/developers"
-          placeholder="Paste your Yelp API key…"
-          value={yelpKey}
-          onChange={v => { setYelpKey(v); setYelpStatus("idle"); }}
-          onTest={testYelpKey}
-          testing={yelpTesting}
-          status={yelpStatus}
-          testId="input-yelp-key"
-        />
+        {serverHasYelp ? (
+          <div className="space-y-1">
+            <p className="label-xs">Yelp Fusion API Key</p>
+            <p className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Configured on server — no key needed here
+            </p>
+          </div>
+        ) : (
+          <ApiKeyInput
+            label="Yelp Fusion API Key"
+            helpText="Adds photos, ratings, reviews, and price to results."
+            helpUrl="https://www.yelp.com/developers/v3/manage_app"
+            helpLinkText="yelp.com/developers"
+            placeholder="Paste your Yelp API key…"
+            value={yelpKey}
+            onChange={v => { setYelpKey(v); setYelpStatus("idle"); }}
+            onTest={testYelpKey}
+            testing={yelpTesting}
+            status={yelpStatus}
+            testId="input-yelp-key"
+          />
+        )}
 
         <div className="pt-2 border-t border-border">
           <p className="text-xs text-muted-foreground">
@@ -407,6 +427,15 @@ export default function Home() {
   const [googleKey, setGoogleKey]   = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
+  // Detect keys already configured on the server so we never transmit them
+  // over the network — the endpoint returns booleans only, not the actual keys.
+  const { data: serverConfig } = useQuery<{ hasYelpKey: boolean; hasGoogleKey: boolean }>({
+    queryKey: ["/api/server-config"],
+    staleTime: Infinity,
+  });
+  const serverHasYelp   = serverConfig?.hasYelpKey   ?? false;
+  const serverHasGoogle = serverConfig?.hasGoogleKey ?? false;
+
   // Results
   const [results, setResults]         = useState<Restaurant[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -434,8 +463,10 @@ export default function Home() {
         priceRange: priceRange.length ? priceRange.join(",") : "all",
         halal, openNow, sortBy, userLat, userLon,
         dataSource,
-        yelpApiKey: dataSource === "yelp" ? yelpKey.trim() : undefined,
-        googleApiKey: dataSource === "google" ? googleKey.trim() : undefined,
+        // Only transmit the key if the server doesn't already have one
+        // configured via environment variable.
+        yelpApiKey:   (dataSource === "yelp"    && !serverHasYelp)   ? yelpKey.trim()   : undefined,
+        googleApiKey: (dataSource === "google"  && !serverHasGoogle) ? googleKey.trim() : undefined,
       });
       return res.json();
     },
@@ -460,7 +491,8 @@ export default function Home() {
       {/* Settings modal */}
       <SettingsPanel open={showSettings} onClose={() => setShowSettings(false)}
         yelpKey={yelpKey} setYelpKey={setYelpKey}
-        googleKey={googleKey} setGoogleKey={setGoogleKey} />
+        googleKey={googleKey} setGoogleKey={setGoogleKey}
+        serverHasYelp={serverHasYelp} serverHasGoogle={serverHasGoogle} />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-40">
@@ -531,23 +563,23 @@ export default function Home() {
                   <span className="text-[10px] opacity-70 font-medium ml-1">(free)</span>
                 </button>
                 <button data-testid="chip-source-yelp" onClick={() => {
-                  if (!yelpKey.trim()) { setShowSettings(true); return; }
+                  if (!yelpKey.trim() && !serverHasYelp) { setShowSettings(true); return; }
                   setDataSource("yelp");
                 }}
                   className={`chip ${dataSource === "yelp" ? "active-yelp" : ""}`}>
                   <Zap className="w-3.5 h-3.5" /> Yelp
-                  {yelpKey.trim()
+                  {(yelpKey.trim() || serverHasYelp)
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
                     : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
                   }
                 </button>
                 <button data-testid="chip-source-google" onClick={() => {
-                  if (!googleKey.trim()) { setShowSettings(true); return; }
+                  if (!googleKey.trim() && !serverHasGoogle) { setShowSettings(true); return; }
                   setDataSource("google");
                 }}
                   className={`chip ${dataSource === "google" ? "active-google" : ""}`}>
                   <MapPin className="w-3.5 h-3.5" /> Google Maps
-                  {googleKey.trim()
+                  {(googleKey.trim() || serverHasGoogle)
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
                     : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
                   }
