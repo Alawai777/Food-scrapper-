@@ -26,8 +26,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
 const DEFAULT_YELP_KEY =
-  typeof import.meta !== "undefined" &&
-  typeof import.meta.env?.VITE_YELP_API_KEY === "string"
+  typeof import.meta.env.VITE_YELP_API_KEY === "string"
     ? import.meta.env.VITE_YELP_API_KEY.trim()
     : "";
 
