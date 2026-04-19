@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTheme } from "@/components/ThemeProvider";
 import {
@@ -24,6 +24,13 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+
+const YELP_KEY_STORAGE = "yartedeats_yelp_api_key";
+const DEFAULT_YELP_KEY =
+  typeof import.meta !== "undefined" &&
+  typeof import.meta.env?.VITE_YELP_API_KEY === "string"
+    ? import.meta.env.VITE_YELP_API_KEY.trim()
+    : "";
 
 // ── Star rating ───────────────────────────────────────────────────────────────
 function StarRating({ rating }: { rating: number }) {
@@ -381,7 +388,14 @@ export default function Home() {
 
   // Data source
   const [dataSource, setDataSource] = useState<"osm" | "yelp" | "google">("osm");
-  const [yelpKey, setYelpKey]       = useState("");
+  const [yelpKey, setYelpKey]       = useState(() => {
+    try {
+      const storedKey = localStorage.getItem(YELP_KEY_STORAGE)?.trim() || "";
+      return storedKey || DEFAULT_YELP_KEY;
+    } catch {
+      return DEFAULT_YELP_KEY;
+    }
+  });
   const [googleKey, setGoogleKey]   = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
@@ -430,6 +444,16 @@ export default function Home() {
 
   const selectedGenre  = CUISINE_GENRES.find(g => g.id === genre);
   const selectedDining = DINING_STYLES.find(d => d.id === diningStyle);
+
+  useEffect(() => {
+    try {
+      const normalized = yelpKey.trim();
+      if (normalized) localStorage.setItem(YELP_KEY_STORAGE, normalized);
+      else localStorage.removeItem(YELP_KEY_STORAGE);
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, [yelpKey]);
 
   return (
     <div className="min-h-screen bg-background">
