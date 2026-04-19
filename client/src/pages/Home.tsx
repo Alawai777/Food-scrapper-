@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useTheme } from "@/components/ThemeProvider";
@@ -435,6 +435,12 @@ export default function Home() {
   });
   const serverHasYelp   = serverConfig?.hasYelpKey   ?? false;
   const serverHasGoogle = serverConfig?.hasGoogleKey ?? false;
+
+  // Auto-select Yelp as the data source when the server already has the key
+  // configured — no manual action needed from the user.
+  useEffect(() => {
+    if (serverHasYelp) setDataSource("yelp");
+  }, [serverHasYelp]);
 
   // Results
   const [results, setResults]         = useState<Restaurant[]>([]);
