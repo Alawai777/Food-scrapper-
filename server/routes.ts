@@ -4,7 +4,12 @@ import axios from "axios";
 import { storage } from "./storage";
 import { CITY_BBOXES, CUISINE_GENRES, DINING_STYLES } from "@shared/schema";
 
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+// Multiple public Overpass API instances — tried in order, next is used on failure
+const OVERPASS_INSTANCES = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.openstreetmap.ru/cgi/interpreter",
+];
 const YELP_BASE   = "https://api.yelp.com/v3";
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
 
@@ -151,10 +156,47 @@ async function searchOverpass(params: any) {
   const amenityTypes  = diningConfig?.osm || ["restaurant"];
 
   const query = buildOverpassQuery(bbox, amenityTypes, cuisineOsm, Boolean(halal));
-  const response = await axios.post(OVERPASS_URL, `data=${encodeURIComponent(query)}`, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: 28000,
-  });
+
+  // Try each Overpass instance in turn; fall back to the next on network errors,
+  // rate-limiting (HTTP 429), or a runtime error embedded in a 200 response.
+  let response: any = null;
+  let lastError: any = null;
+  for (const url of OVERPASS_INSTANCES) {
+    try {
+      const res = await axios.post(url, `data=${encodeURIComponent(query)}`, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 30000,
+      });
+
+      // Overpass may return HTTP 200 with a remark indicating a runtime error
+      // (e.g. "Query timeout after 25 seconds" or server-overload messages).
+      const remark: string = res.data?.remark || "";
+      if (remark && !Array.isArray(res.data?.elements)) {
+        lastError = new Error(`Overpass: ${remark}`);
+        continue; // try next instance
+      }
+
+      response = res;
+      break;
+    } catch (err: any) {
+      lastError = err;
+      // Only retry on transient/network errors or rate-limiting
+      const status = err?.response?.status;
+      const code   = err?.code || "";
+      const isRetryable =
+        status === 429 || status === 503 || status === 504 ||
+        code === "ECONNREFUSED" || code === "ENOTFOUND" ||
+        code === "ETIMEDOUT"   || code === "ECONNRESET" ||
+        (err?.message || "").toLowerCase().includes("timeout");
+      if (isRetryable) continue;
+      break; // non-retryable error — don't try remaining instances
+    }
+  }
+
+  if (!response) {
+    // Re-throw so the route's catch block can surface a useful message
+    throw lastError || new Error("All Overpass instances failed");
+  }
 
   const centerLat = (bbox[0] + bbox[2]) / 2;
   const centerLon = (bbox[1] + bbox[3]) / 2;
@@ -497,6 +539,12 @@ export function registerRoutes(httpServer: Server, app: Express) {
       }
       if (source === "google" && err?.response?.status === 429) {
         return res.status(429).json({ error: "Google API rate limit reached. Try again later.", results: [] });
+      }
+      if (source === "osm" && (err?.response?.status === 429 || (err?.message || "").includes("rate limit"))) {
+        return res.status(429).json({ error: "OpenStreetMap is temporarily busy. Please wait a moment and try again.", results: [] });
+      }
+      if (source === "osm" && (err?.message || "").toLowerCase().includes("timeout")) {
+        return res.status(504).json({ error: "OpenStreetMap query timed out. Try a more specific cuisine or a smaller city.", results: [] });
       }
 
       const errorMessages: Record<string, string> = {
