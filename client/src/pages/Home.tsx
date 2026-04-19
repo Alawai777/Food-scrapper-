@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTheme } from "@/components/ThemeProvider";
 import {
@@ -365,6 +365,13 @@ function SettingsPanel({
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Home() {
   const { theme, toggle } = useTheme();
+  const [yelpKey, setYelpKey] = useState(() => {
+    try {
+      return localStorage.getItem("yartedeats_yelp_key") || "";
+    } catch {
+      return "";
+    }
+  });
 
   // Filter state
   const [city, setCity]             = useState("Dearborn, MI");
@@ -381,7 +388,6 @@ export default function Home() {
 
   // Data source
   const [dataSource, setDataSource] = useState<"osm" | "yelp" | "google">("osm");
-  const [yelpKey, setYelpKey]       = useState("");
   const [googleKey, setGoogleKey]   = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
@@ -430,6 +436,15 @@ export default function Home() {
 
   const selectedGenre  = CUISINE_GENRES.find(g => g.id === genre);
   const selectedDining = DINING_STYLES.find(d => d.id === diningStyle);
+
+  useEffect(() => {
+    try {
+      if (yelpKey.trim()) localStorage.setItem("yartedeats_yelp_key", yelpKey.trim());
+      else localStorage.removeItem("yartedeats_yelp_key");
+    } catch {
+      // ignore localStorage failures
+    }
+  }, [yelpKey]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -508,7 +523,6 @@ export default function Home() {
                   <span className="text-[10px] opacity-70 font-medium ml-1">(free)</span>
                 </button>
                 <button data-testid="chip-source-yelp" onClick={() => {
-                  if (!yelpKey.trim()) { setShowSettings(true); return; }
                   setDataSource("yelp");
                 }}
                   className={`chip ${dataSource === "yelp" ? "active-yelp" : ""}`}>

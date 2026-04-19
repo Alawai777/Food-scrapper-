@@ -716,6 +716,38 @@ export async function validateGoogleKey(
   }
 }
 
+async function searchViaBackend(params: SearchParams): Promise<SearchResult | null> {
+  try {
+    const response = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) return null;
+
+    const data = (await response.json()) as Partial<SearchResult>;
+    if (!response.ok) {
+      return {
+        results: [],
+        source: params.dataSource,
+        total: 0,
+        error: data.error || "Search error.",
+      };
+    }
+
+    return {
+      results: data.results || [],
+      source: data.source || params.dataSource,
+      total: typeof data.total === "number" ? data.total : (data.results || []).length,
+      error: data.error,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN SEARCH ENTRY POINT
 // ══════════════════════════════════════════════════════════════════════════════
@@ -730,6 +762,20 @@ export async function searchRestaurants(
 
     if (dataSource === "yelp") {
       if (!yelpApiKey?.trim()) {
+        const backendResult = await searchViaBackend(params);
+        if (backendResult) {
+          if (!backendResult.error) {
+            saveSearchHistory({
+              city: params.city,
+              genre: params.genre,
+              diningStyle: params.diningStyle,
+              dataSource,
+              resultCount: backendResult.results.length,
+            });
+          }
+          return backendResult;
+        }
+
         return {
           results: [],
           source: "yelp",
