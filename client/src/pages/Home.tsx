@@ -25,6 +25,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
+const YELP_KEY_STORAGE_KEY = "yartedeats_yelp_key";
+
 // ── Star rating ───────────────────────────────────────────────────────────────
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -365,10 +367,12 @@ function SettingsPanel({
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Home() {
   const { theme, toggle } = useTheme();
+  const { toast } = useToast();
   const [yelpKey, setYelpKey] = useState(() => {
     try {
-      return localStorage.getItem("yartedeats_yelp_key") || "";
-    } catch {
+      return localStorage.getItem(YELP_KEY_STORAGE_KEY) || "";
+    } catch (error) {
+      console.warn("Could not load saved Yelp key from localStorage.", error);
       return "";
     }
   });
@@ -439,10 +443,10 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      if (yelpKey.trim()) localStorage.setItem("yartedeats_yelp_key", yelpKey.trim());
-      else localStorage.removeItem("yartedeats_yelp_key");
-    } catch {
-      // ignore localStorage failures
+      if (yelpKey.trim()) localStorage.setItem(YELP_KEY_STORAGE_KEY, yelpKey.trim());
+      else localStorage.removeItem(YELP_KEY_STORAGE_KEY);
+    } catch (error) {
+      console.warn("Could not persist Yelp key to localStorage.", error);
     }
   }, [yelpKey]);
 
@@ -523,6 +527,12 @@ export default function Home() {
                   <span className="text-[10px] opacity-70 font-medium ml-1">(free)</span>
                 </button>
                 <button data-testid="chip-source-yelp" onClick={() => {
+                  if (!yelpKey.trim()) {
+                    toast({
+                      title: "Yelp selected",
+                      description: "Using server Yelp key if configured. Add your key in Settings if needed.",
+                    });
+                  }
                   setDataSource("yelp");
                 }}
                   className={`chip ${dataSource === "yelp" ? "active-yelp" : ""}`}>

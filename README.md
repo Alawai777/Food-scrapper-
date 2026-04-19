@@ -81,7 +81,7 @@ YartedEats works out of the box with **OpenStreetMap** (no API key needed). For 
 
 Enter your keys in the ⚙️ Settings panel within the app. The Yelp key is saved in browser storage so you don't need to re-enter it every visit.
 
-If you're running the Express server, you can also set `YELP_API_KEY` as an environment variable and Yelp searches will use it automatically in the background (without hardcoding a key in source files).
+If you're running the Express server, you can also set `YELP_API_KEY` as an environment variable and Yelp searches will use it automatically in the background.
 
 > **🔒 API Key Security:** Since this is a client-side app, API keys are used directly in the browser. For **Google Maps**, [restrict your key](https://cloud.google.com/docs/authentication/api-keys#securing_an_api_key) to your domain in Google Cloud Console. **Yelp** requests go through a CORS proxy (corsproxy.io) since Yelp's API doesn't support browser requests — avoid using production keys for Yelp in the web version.
 

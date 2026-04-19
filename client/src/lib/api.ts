@@ -183,7 +183,8 @@ function checkOpenNow(hoursStr: string): boolean | null {
       }
     }
     return null;
-  } catch {
+  } catch (error) {
+    console.warn("Backend Yelp search fallback unavailable.", error);
     return null;
   }
 }
@@ -727,23 +728,30 @@ async function searchViaBackend(params: SearchParams): Promise<SearchResult | nu
     const contentType = response.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) return null;
 
-    const data = (await response.json()) as Partial<SearchResult>;
+    const data: unknown = await response.json();
+    const parsed = (data && typeof data === "object" ? data : {}) as {
+      results?: Restaurant[];
+      source?: string;
+      total?: number;
+      error?: string;
+    };
     if (!response.ok) {
       return {
         results: [],
         source: params.dataSource,
         total: 0,
-        error: data.error || "Search error.",
+        error: parsed.error || "Search error.",
       };
     }
 
     return {
-      results: data.results || [],
-      source: data.source || params.dataSource,
-      total: typeof data.total === "number" ? data.total : (data.results || []).length,
-      error: data.error,
+      results: Array.isArray(parsed.results) ? parsed.results : [],
+      source: parsed.source || params.dataSource,
+      total: typeof parsed.total === "number" ? parsed.total : (Array.isArray(parsed.results) ? parsed.results.length : 0),
+      error: parsed.error,
     };
-  } catch {
+  } catch (error) {
+    console.warn("Backend Yelp search fallback unavailable.", error);
     return null;
   }
 }
