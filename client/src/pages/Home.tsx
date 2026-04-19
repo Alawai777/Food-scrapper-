@@ -538,14 +538,14 @@ export default function Home() {
                   <span className="text-[10px] opacity-70 font-medium ml-1">(free)</span>
                 </button>
                 <button data-testid="chip-source-yelp" onClick={() => {
-                  if (!yelpKey.trim() && !hasServerYelpKey) {
-                    setShowSettings(true);
-                    return;
-                  }
-                  if (!yelpKey.trim() && hasServerYelpKey) {
+                  if (!yelpKey.trim()) {
+                    if (!hasServerYelpKey) {
+                      setShowSettings(true);
+                      return;
+                    }
                     toast({
                       title: "Yelp selected",
-                      description: "Using your server Yelp key automatically.",
+                      description: "Using server-side Yelp key.",
                     });
                   }
                   setDataSource("yelp");
