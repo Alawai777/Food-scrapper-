@@ -71,6 +71,8 @@ export interface ServerKeyStatus {
   googleConfigured: boolean;
 }
 
+const YELP_KEY_ERROR_PATTERN = /(api key|yelp_api_key|yelp key|key is required)/i;
+
 // ── Internal types ──────────────────────────────────────────────────────────
 
 interface OsmElement {
@@ -792,23 +794,28 @@ export async function searchRestaurants(
     if (dataSource === "yelp") {
       const trimmedYelpKey = yelpApiKey?.trim();
       const backendResult = await searchViaBackend(params);
-      if (backendResult) {
-        if (!backendResult.error) {
-          saveSearchHistory({
-            city: params.city,
-            genre: params.genre,
-            diningStyle: params.diningStyle,
-            dataSource,
-            resultCount: backendResult.results.length,
-          });
-          return backendResult;
-        }
-        if (!trimmedYelpKey) {
-          return backendResult;
-        }
+      if (backendResult && !backendResult.error) {
+        saveSearchHistory({
+          city: params.city,
+          genre: params.genre,
+          diningStyle: params.diningStyle,
+          dataSource,
+          resultCount: backendResult.results.length,
+        });
+        return backendResult;
       }
 
       if (!trimmedYelpKey) {
+        if (backendResult?.error) {
+          const hasKeyHint = YELP_KEY_ERROR_PATTERN.test(backendResult.error);
+          return {
+            ...backendResult,
+            error: hasKeyHint
+              ? backendResult.error
+              : "Yelp search failed via server and no local Yelp key is set. Paste one in Settings or set YELP_API_KEY.",
+          };
+        }
+
         return {
           results: [],
           source: "yelp",

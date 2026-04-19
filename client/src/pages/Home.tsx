@@ -543,7 +543,7 @@ export default function Home() {
                       title: "Yelp selected",
                       description: hasServerYelpKey
                         ? "Using server-side Yelp key in the background."
-                        : "Yelp key can be applied in the background when configured on the server.",
+                        : "No local key set. Configure YELP_API_KEY on the server for background Yelp search.",
                     });
                   }
                   setDataSource("yelp");
