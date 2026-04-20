@@ -500,7 +500,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-label="YartedEats logo">
-              <rect width="34" height="34" rx="9" fill="hsl(24 88% 40%)"/>
+              <rect width="34" height="34" rx="9" fill="hsl(214 45% 34%)"/>
               <path d="M17 6 L22 14 L30 15.5 L24 21.5 L25.5 30 L17 25.5 L8.5 30 L10 21.5 L4 15.5 L12 14 Z" stroke="white" strokeWidth="1.5" fill="none" opacity="0.5"/>
               <circle cx="17" cy="17" r="6" fill="white" opacity="0.15"/>
               <path d="M13 17 Q15 14 17 17 Q19 20 21 17" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none"/>
