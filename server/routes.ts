@@ -265,7 +265,7 @@ async function searchOverpass(params: SearchParams): Promise<{
 
   const query = buildOverpassQuery(bbox, amenityTypes, cuisineOsm, Boolean(halal));
   let checks = 0;
-  let endpointUsed = OVERPASS_URLS[0];
+  let endpointUsed = "";
   let response: { data: { elements?: OsmElement[] } } | null = null;
   let lastError: unknown;
 
