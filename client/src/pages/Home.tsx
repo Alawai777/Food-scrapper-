@@ -1,8 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTheme } from "@/components/ThemeProvider";
 import {
   searchRestaurants,
+  getServerKeyStatus,
   validateYelpKey,
   validateGoogleKey,
   type Restaurant,
@@ -24,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+
+const YELP_KEY_STORAGE_KEY = "yartedeats_yelp_key";
 
 // ── Star rating ───────────────────────────────────────────────────────────────
 function StarRating({ rating }: { rating: number }) {
@@ -365,6 +368,8 @@ function SettingsPanel({
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Home() {
   const { theme, toggle } = useTheme();
+  const { toast } = useToast();
+  const [yelpKey, setYelpKey] = useState("");
 
   // Filter state
   const [city, setCity]             = useState("Dearborn, MI");
@@ -381,8 +386,8 @@ export default function Home() {
 
   // Data source
   const [dataSource, setDataSource] = useState<"osm" | "yelp" | "google">("osm");
-  const [yelpKey, setYelpKey]       = useState("");
   const [googleKey, setGoogleKey]   = useState("");
+  const [hasServerYelpKey, setHasServerYelpKey] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   // Results
@@ -430,6 +435,36 @@ export default function Home() {
 
   const selectedGenre  = CUISINE_GENRES.find(g => g.id === genre);
   const selectedDining = DINING_STYLES.find(d => d.id === diningStyle);
+
+  useEffect(() => {
+    let mounted = true;
+    let savedYelpKey = "";
+    try {
+      savedYelpKey = (localStorage.getItem(YELP_KEY_STORAGE_KEY) || "").trim();
+      if (savedYelpKey) setYelpKey(savedYelpKey);
+    } catch (error) {
+      console.warn("Could not load saved Yelp key from localStorage.", error);
+    }
+
+    getServerKeyStatus().then((status) => {
+      if (!mounted) return;
+      const serverHasYelpKey = Boolean(status?.yelpConfigured);
+      setHasServerYelpKey(serverHasYelpKey);
+      if (savedYelpKey || serverHasYelpKey) {
+        setDataSource("yelp");
+      }
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (yelpKey.trim()) localStorage.setItem(YELP_KEY_STORAGE_KEY, yelpKey.trim());
+      else localStorage.removeItem(YELP_KEY_STORAGE_KEY);
+    } catch (error) {
+      console.warn("Could not persist Yelp key to localStorage.", error);
+    }
+  }, [yelpKey]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -508,14 +543,21 @@ export default function Home() {
                   <span className="text-[10px] opacity-70 font-medium ml-1">(free)</span>
                 </button>
                 <button data-testid="chip-source-yelp" onClick={() => {
-                  if (!yelpKey.trim()) { setShowSettings(true); return; }
+                  if (!yelpKey.trim()) {
+                    toast({
+                      title: "Yelp selected",
+                      description: hasServerYelpKey
+                        ? "Using server-side Yelp key in the background."
+                        : "No local Yelp key needed. Configure YELP_API_KEY on the server for background Yelp search.",
+                    });
+                  }
                   setDataSource("yelp");
                 }}
                   className={`chip ${dataSource === "yelp" ? "active-yelp" : ""}`}>
                   <Zap className="w-3.5 h-3.5" /> Yelp
-                  {yelpKey.trim()
+                  {(yelpKey.trim() || hasServerYelpKey)
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
-                    : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
+                    : <span className="text-[10px] font-medium ml-1 opacity-50">background</span>
                   }
                 </button>
                 <button data-testid="chip-source-google" onClick={() => {

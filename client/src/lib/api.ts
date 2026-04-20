@@ -66,6 +66,13 @@ export interface SearchResult {
   error?: string;
 }
 
+export interface ServerKeyStatus {
+  yelpConfigured: boolean;
+  googleConfigured: boolean;
+}
+
+const YELP_KEY_ERROR_PATTERN = /(api key|yelp_api_key|yelp key|key is required)/i;
+
 // ── Internal types ──────────────────────────────────────────────────────────
 
 interface OsmElement {
@@ -183,7 +190,8 @@ function checkOpenNow(hoursStr: string): boolean | null {
       }
     }
     return null;
-  } catch {
+  } catch (error) {
+    console.warn("Backend Yelp search fallback unavailable.", error);
     return null;
   }
 }
@@ -716,6 +724,61 @@ export async function validateGoogleKey(
   }
 }
 
+export async function getServerKeyStatus(): Promise<ServerKeyStatus | null> {
+  try {
+    const response = await fetch("/api/key-status");
+    if (!response.ok) return null;
+    const data: unknown = await response.json();
+    if (!data || typeof data !== "object") return null;
+    const parsed = data as Partial<ServerKeyStatus>;
+    return {
+      yelpConfigured: Boolean(parsed.yelpConfigured),
+      googleConfigured: Boolean(parsed.googleConfigured),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function searchViaBackend(params: SearchParams): Promise<SearchResult | null> {
+  try {
+    const response = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) return null;
+
+    const data: unknown = await response.json();
+    const parsed = (data && typeof data === "object" ? data : {}) as {
+      results?: Restaurant[];
+      source?: string;
+      total?: number;
+      error?: string;
+    };
+    if (!response.ok) {
+      return {
+        results: [],
+        source: params.dataSource,
+        total: 0,
+        error: parsed.error || "Search error.",
+      };
+    }
+
+    return {
+      results: Array.isArray(parsed.results) ? parsed.results : [],
+      source: parsed.source || params.dataSource,
+      total: typeof parsed.total === "number" ? parsed.total : (Array.isArray(parsed.results) ? parsed.results.length : 0),
+      error: parsed.error,
+    };
+  } catch (error) {
+    console.warn("Backend Yelp search fallback unavailable.", error);
+    return null;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN SEARCH ENTRY POINT
 // ══════════════════════════════════════════════════════════════════════════════
@@ -729,16 +792,41 @@ export async function searchRestaurants(
     let results: Restaurant[];
 
     if (dataSource === "yelp") {
-      if (!yelpApiKey?.trim()) {
+      const trimmedYelpKey = yelpApiKey?.trim();
+      const backendResult = await searchViaBackend(params);
+      if (backendResult && !backendResult.error) {
+        saveSearchHistory({
+          city: params.city,
+          genre: params.genre,
+          diningStyle: params.diningStyle,
+          dataSource,
+          resultCount: backendResult.results.length,
+        });
+        return backendResult;
+      }
+
+      if (!trimmedYelpKey) {
+        if (backendResult?.error) {
+          const hasKeyHint = YELP_KEY_ERROR_PATTERN.test(backendResult.error);
+          return {
+            ...backendResult,
+            error: hasKeyHint
+              ? backendResult.error
+              : "Yelp search failed via server and no local Yelp key is set. Paste one in Settings or set YELP_API_KEY.",
+          };
+        }
+
         return {
           results: [],
           source: "yelp",
           total: 0,
           error:
-            "Yelp API key is required. Paste it in Settings.",
+            "Yelp search is unavailable right now. Set YELP_API_KEY on the server for background Yelp search.",
         };
       }
-      results = await searchYelp(params, yelpApiKey.trim());
+
+      // Static/no-backend mode fallback (or backend error with a client key available).
+      results = await searchYelp(params, trimmedYelpKey);
     } else if (dataSource === "google") {
       if (!googleApiKey?.trim()) {
         return {

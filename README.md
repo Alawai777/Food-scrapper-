@@ -79,9 +79,11 @@ YartedEats works out of the box with **OpenStreetMap** (no API key needed). For 
 - **Yelp Fusion API** — Get a free key at [yelp.com/developers](https://www.yelp.com/developers/v3/manage_app)
 - **Google Maps Places API** — Get a key at [Google Cloud Console](https://console.cloud.google.com/apis/credentials) ($200/mo free credit)
 
-Enter your keys in the ⚙️ Settings panel within the app. Keys are stored in your browser only.
+Enter your keys in the ⚙️ Settings panel within the app. The Yelp key is saved in browser storage so you don't need to re-enter it every visit.
 
-> **🔒 API Key Security:** Since this is a client-side app, API keys are used directly in the browser. For **Google Maps**, [restrict your key](https://cloud.google.com/docs/authentication/api-keys#securing_an_api_key) to your domain in Google Cloud Console. **Yelp** requests go through a CORS proxy (corsproxy.io) since Yelp's API doesn't support browser requests — avoid using production keys for Yelp in the web version.
+If you're running the Express server, you can also set `YELP_API_KEY` as an environment variable and Yelp searches will always try to use it in the background first.
+
+> **🔒 API Key Security:** Since this is primarily a client-side app, API keys may be used in the browser. For **Google Maps**, [restrict your key](https://cloud.google.com/docs/authentication/api-keys#securing_an_api_key) to your domain in Google Cloud Console. **Yelp** searches now use the backend route first when available (server-side key), with browser/CORS-proxy fallback for static mode.
 
 ## How It Works
 
@@ -89,7 +91,7 @@ The app runs **entirely in your browser** — no backend server required:
 
 1. **OpenStreetMap** searches go directly to the [Overpass API](https://overpass-api.de/) (free, full CORS support)
 2. **Google Maps** searches go directly to the [Places API](https://developers.google.com/maps/documentation/places/web-service) (supports CORS with your API key)
-3. **Yelp** searches use a CORS proxy since Yelp's API doesn't support browser requests
+3. **Yelp** searches use the backend `/api/search` route first (for server-side key usage), and fall back to CORS proxy mode for static/no-backend deployments
 4. Search history is saved in **localStorage** (stays on your device)
 
 ## Deployment

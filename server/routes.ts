@@ -531,6 +531,12 @@ async function searchGoogle(params: SearchParams, apiKey: string): Promise<Resta
 let lastGoogleApiKey = "";
 
 export function registerRoutes(httpServer: Server, app: Express) {
+  app.get("/api/key-status", (_req, res) => {
+    res.json({
+      yelpConfigured: Boolean(process.env.YELP_API_KEY),
+      googleConfigured: Boolean(process.env.GOOGLE_MAPS_API_KEY),
+    });
+  });
 
   // Main search — supports OSM, Yelp, and Google
   app.post("/api/search", async (req, res) => {
