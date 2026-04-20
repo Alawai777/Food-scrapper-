@@ -821,7 +821,7 @@ export async function searchRestaurants(
           source: "yelp",
           total: 0,
           error:
-            "Yelp API key is required. Paste it in Settings.",
+            "Yelp search is unavailable right now. Set YELP_API_KEY on the server for background Yelp search.",
         };
       }
 
