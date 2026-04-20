@@ -74,6 +74,7 @@ export interface ServerKeyStatus {
 }
 
 const YELP_KEY_ERROR_PATTERN = /(api key|yelp_api_key|yelp key|key is required)/i;
+const GOOGLE_KEY_ERROR_PATTERN = /(api key|google_maps_api_key|google key|places api|key is required)/i;
 
 // ── Internal types ──────────────────────────────────────────────────────────
 
@@ -197,7 +198,7 @@ function checkOpenNow(hoursStr: string): boolean | null {
     }
     return null;
   } catch (error) {
-    console.warn("Backend Yelp search fallback unavailable.", error);
+    console.warn("Could not parse opening hours string.", error);
     return null;
   }
 }
@@ -821,7 +822,7 @@ async function searchViaBackend(params: SearchParams): Promise<SearchResult | nu
       endpoint: parsed.endpoint,
     };
   } catch (error) {
-    console.warn("Backend Yelp search fallback unavailable.", error);
+    console.warn("Backend search fallback unavailable.", error);
     return null;
   }
 }
@@ -877,16 +878,39 @@ export async function searchRestaurants(
       // Static/no-backend mode fallback (or backend error with a client key available).
       results = await searchYelp(params, trimmedYelpKey);
     } else if (dataSource === "google") {
-      if (!googleApiKey?.trim()) {
+      const trimmedGoogleKey = googleApiKey?.trim();
+      const backendResult = await searchViaBackend(params);
+      if (backendResult && !backendResult.error) {
+        saveSearchHistory({
+          city: params.city,
+          genre: params.genre,
+          diningStyle: params.diningStyle,
+          dataSource,
+          resultCount: backendResult.results.length,
+        });
+        return backendResult;
+      }
+
+      if (!trimmedGoogleKey) {
+        if (backendResult?.error) {
+          const hasKeyHint = GOOGLE_KEY_ERROR_PATTERN.test(backendResult.error);
+          return {
+            ...backendResult,
+            error: hasKeyHint
+              ? backendResult.error
+              : "Google search failed via server and no local Google key is set. Paste one in Settings or set GOOGLE_MAPS_API_KEY.",
+          };
+        }
+
         return {
           results: [],
           source: "google",
           total: 0,
           error:
-            "Google Maps API key is required. Paste it in Settings.",
+            "Google search is unavailable right now. Set GOOGLE_MAPS_API_KEY on the server or paste a key in Settings.",
         };
       }
-      results = await searchGoogle(params, googleApiKey.trim());
+      results = await searchGoogle(params, trimmedGoogleKey);
     } else {
       const overpass = await searchOverpass(params);
       results = overpass.results;

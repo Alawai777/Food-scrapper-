@@ -403,6 +403,7 @@ export default function Home() {
   const [dataSource, setDataSource] = useState<"osm" | "yelp" | "google">("osm");
   const [googleKey, setGoogleKey]   = useState("");
   const [hasServerYelpKey, setHasServerYelpKey] = useState(false);
+  const [hasServerGoogleKey, setHasServerGoogleKey] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   // Results
@@ -470,7 +471,9 @@ export default function Home() {
     getServerKeyStatus().then((status) => {
       if (!mounted) return;
       const serverHasYelpKey = Boolean(status?.yelpConfigured);
+      const serverHasGoogleKey = Boolean(status?.googleConfigured);
       setHasServerYelpKey(serverHasYelpKey);
+      setHasServerGoogleKey(serverHasGoogleKey);
       if (savedYelpKey || serverHasYelpKey) {
         setDataSource("yelp");
       }
@@ -582,12 +585,12 @@ export default function Home() {
                   }
                 </button>
                 <button data-testid="chip-source-google" onClick={() => {
-                  if (!googleKey.trim()) { setShowSettings(true); return; }
+                  if (!googleKey.trim() && !hasServerGoogleKey) { setShowSettings(true); return; }
                   setDataSource("google");
                 }}
                   className={`chip ${dataSource === "google" ? "active-google" : ""}`}>
                   <MapPin className="w-3.5 h-3.5" /> Google Maps
-                  {googleKey.trim()
+                  {(googleKey.trim() || hasServerGoogleKey)
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
                     : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
                   }

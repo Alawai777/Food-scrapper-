@@ -82,7 +82,7 @@ YartedEats works out of the box with **OpenStreetMap** (no API key needed). For 
 Enter your keys in the ⚙️ Settings panel within the app. The Yelp key is saved in browser storage so you don't need to re-enter it every visit.
 You can also remove past local search history from the same Settings panel using **Delete Past Search History**.
 
-If you're running the Express server, you can also set `YELP_API_KEY` as an environment variable and Yelp searches will always try to use it in the background first.
+If you're running the Express server, you can set `YELP_API_KEY` and/or `GOOGLE_MAPS_API_KEY` as environment variables, and those keys will be used by backend searches.
 
 > **🔒 API Key Security:** Since this is primarily a client-side app, API keys may be used in the browser. For **Google Maps**, [restrict your key](https://cloud.google.com/docs/authentication/api-keys#securing_an_api_key) to your domain in Google Cloud Console. **Yelp** searches now use the backend route first when available (server-side key), with browser/CORS-proxy fallback for static mode.
 
