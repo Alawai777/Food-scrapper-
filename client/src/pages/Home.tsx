@@ -6,6 +6,7 @@ import {
   getServerKeyStatus,
   validateYelpKey,
   validateGoogleKey,
+  clearSearchHistory,
   type Restaurant,
   type SearchResult,
 } from "@/lib/api";
@@ -357,6 +358,16 @@ function SettingsPanel({
             Without API keys, YartedEats uses <strong>OpenStreetMap</strong> (free, no key needed).
             OSM has addresses and hours, but no photos or star ratings.
           </p>
+          <Button
+            variant="outline"
+            className="mt-3 w-full"
+            onClick={() => {
+              clearSearchHistory();
+              toast({ title: "Past search history deleted", description: "Saved local history has been cleared." });
+            }}
+          >
+            Delete Past Search History
+          </Button>
         </div>
       </div>
     </div>
