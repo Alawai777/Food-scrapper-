@@ -741,7 +741,7 @@ export default function Home() {
                 </span>
                 {dataSource === "osm" && checksPerSearch !== null && (
                   <span className="text-muted-foreground">
-                    {checksPerSearch} overpass check{checksPerSearch === 1 ? "" : "s"}
+                    {checksPerSearch} OSM endpoint attempt{checksPerSearch === 1 ? "" : "s"}
                     {searchEndpoint ? ` (${searchEndpoint.replace(/^https?:\/\//, "").split("/")[0]})` : ""}
                   </span>
                 )}
@@ -765,7 +765,7 @@ export default function Home() {
             </p>
             {dataSource === "osm" && checksPerSearch !== null && (
               <p className="text-xs text-muted-foreground mt-2">
-                Search used {checksPerSearch} overpass check{checksPerSearch === 1 ? "" : "s"}
+                Search used {checksPerSearch} OSM endpoint attempt{checksPerSearch === 1 ? "" : "s"}
                 {searchEndpoint ? ` (${searchEndpoint.replace(/^https?:\/\//, "").split("/")[0]})` : ""}.
               </p>
             )}
