@@ -265,7 +265,7 @@ async function searchOverpass(params: SearchParams): Promise<{
 
   const query = buildOverpassQuery(bbox, amenityTypes, cuisineOsm, Boolean(halal));
   let checks = 0;
-  let endpointUsed = "";
+  let successfulEndpoint = "";
   let response: { data: { elements?: OsmElement[] } } | null = null;
   let lastError: unknown;
 
@@ -276,7 +276,7 @@ async function searchOverpass(params: SearchParams): Promise<{
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         timeout: 28000,
       });
-      endpointUsed = endpoint;
+      successfulEndpoint = endpoint;
       break;
     } catch (error) {
       lastError = error;
@@ -310,7 +310,7 @@ async function searchOverpass(params: SearchParams): Promise<{
   else if (sortBy === "name") results.sort((a, b) => a.name.localeCompare(b.name));
   else results.sort((a, b) => (a.isHalal === b.isHalal ? 0 : a.isHalal ? -1 : 1));
 
-  return { results, checks, endpoint: endpointUsed };
+  return { results, checks, endpoint: successfulEndpoint };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

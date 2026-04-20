@@ -352,7 +352,7 @@ async function searchOverpass(params: SearchParams): Promise<{
   const query = buildOverpassQuery(bbox, amenityTypes, cuisineOsm, Boolean(halal));
 
   let checks = 0;
-  let endpointUsed = "";
+  let successfulEndpoint = "";
   let data: { elements?: OsmElement[] } | null = null;
   let lastError: unknown;
 
@@ -366,7 +366,7 @@ async function searchOverpass(params: SearchParams): Promise<{
       });
       if (!response.ok) throw new Error(`Overpass error: ${response.status}`);
       data = await response.json();
-      endpointUsed = endpoint;
+      successfulEndpoint = endpoint;
       break;
     } catch (error) {
       lastError = error;
@@ -409,7 +409,7 @@ async function searchOverpass(params: SearchParams): Promise<{
       a.isHalal === b.isHalal ? 0 : a.isHalal ? -1 : 1,
     );
 
-  return { results, checks, endpoint: endpointUsed };
+  return { results, checks, endpoint: successfulEndpoint };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
