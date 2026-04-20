@@ -95,6 +95,18 @@ The app runs **entirely in your browser** — no backend server required:
 3. **Yelp** searches use the backend `/api/search` route first (for server-side key usage), and fall back to CORS proxy mode for static/no-backend deployments
 4. Search history is saved in **localStorage** (stays on your device)
 
+### Overpass reliability + per-search checks
+
+- OpenStreetMap requests now try multiple Overpass endpoints in order to reduce downtime issues from a single endpoint outage.
+- Each search response includes `checksPerSearch`, which is the number of Overpass endpoint checks needed for that search.
+- In the UI, OSM results now show how many Overpass checks were required and which endpoint responded.
+
+### Notes on online food delivery data (based on common community guidance)
+
+- Community discussions commonly recommend **commercial APIs** (Yelp, Google Places, platform-specific APIs) for stronger freshness and delivery/takeout metadata.
+- OSM/Overpass can still be useful, but delivery tags like `delivery=*` and `takeaway=*` are often incomplete or uneven by area.
+- Practical approach: use OSM as a free baseline and combine with richer provider APIs when delivery-specific quality is important.
+
 ## Deployment
 
 The app automatically deploys to GitHub Pages when you push to `main` via the `.github/workflows/deploy.yml` workflow.

@@ -4,7 +4,11 @@ import axios from "axios";
 import { storage } from "./storage";
 import { CITY_BBOXES, CUISINE_GENRES, DINING_STYLES } from "@shared/schema";
 
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const OVERPASS_URLS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.openstreetmap.ru/api/interpreter",
+];
 const YELP_BASE   = "https://api.yelp.com/v3";
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
 
@@ -244,7 +248,11 @@ function checkOpenNow(hoursStr: string): boolean | null {
   } catch { return null; }
 }
 
-async function searchOverpass(params: SearchParams): Promise<Restaurant[]> {
+async function searchOverpass(params: SearchParams): Promise<{
+  results: Restaurant[];
+  checks: number;
+  endpoint: string;
+}> {
   const { city, genre, diningStyle, halal, openNow, sortBy, userLat, userLon } = params;
 
   const bbox = CITY_BBOXES[city];
@@ -256,10 +264,32 @@ async function searchOverpass(params: SearchParams): Promise<Restaurant[]> {
   const amenityTypes  = diningConfig?.osm || ["restaurant"];
 
   const query = buildOverpassQuery(bbox, amenityTypes, cuisineOsm, Boolean(halal));
-  const response = await axios.post(OVERPASS_URL, `data=${encodeURIComponent(query)}`, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: 28000,
-  });
+  let checks = 0;
+  let successfulEndpoint = "";
+  let response: { data: { elements?: OsmElement[] } } | null = null;
+  let lastError: unknown;
+
+  for (const endpoint of OVERPASS_URLS) {
+    checks += 1;
+    try {
+      response = await axios.post(endpoint, `data=${encodeURIComponent(query)}`, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 28000,
+      });
+      successfulEndpoint = endpoint;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!response) {
+    throw new Error(
+      `Overpass failed after ${checks} checks${
+        lastError instanceof Error ? `: ${lastError.message}` : ""
+      }`,
+    );
+  }
 
   const centerLat = (bbox[0] + bbox[2]) / 2;
   const centerLon = (bbox[1] + bbox[3]) / 2;
@@ -280,7 +310,7 @@ async function searchOverpass(params: SearchParams): Promise<Restaurant[]> {
   else if (sortBy === "name") results.sort((a, b) => a.name.localeCompare(b.name));
   else results.sort((a, b) => (a.isHalal === b.isHalal ? 0 : a.isHalal ? -1 : 1));
 
-  return results;
+  return { results, checks, endpoint: successfulEndpoint };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -557,6 +587,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
     try {
       let results: Restaurant[];
+      let checksPerSearch: number | undefined;
+      let endpoint = "";
 
       if (source === "yelp") {
         if (!resolvedYelpKey) {
@@ -575,7 +607,10 @@ export function registerRoutes(httpServer: Server, app: Express) {
         }
         results = await searchGoogle(req.body, resolvedGoogleKey);
       } else {
-        results = await searchOverpass(req.body);
+        const overpass = await searchOverpass(req.body);
+        results = overpass.results;
+        checksPerSearch = overpass.checks;
+        endpoint = overpass.endpoint;
       }
 
       // Save search
@@ -589,7 +624,13 @@ export function registerRoutes(httpServer: Server, app: Express) {
         resultsJson: JSON.stringify(results),
       });
 
-      res.json({ results, source, total: results.length });
+      res.json({
+        results,
+        source,
+        total: results.length,
+        checksPerSearch,
+        endpoint,
+      });
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: unknown; status?: number }; message?: string };
       console.error(`${source} error:`, axiosErr?.response?.data || (err instanceof Error ? err.message : err));
