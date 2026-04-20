@@ -362,8 +362,12 @@ function SettingsPanel({
             variant="outline"
             className="mt-3 w-full"
             onClick={() => {
-              clearSearchHistory();
-              toast({ title: "Past search history deleted", description: "Saved local history has been cleared." });
+              const didClear = clearSearchHistory();
+              toast(
+                didClear
+                  ? { title: "Past search history deleted", description: "Saved local history has been cleared." }
+                  : { title: "Could not delete history", description: "Browser storage is unavailable right now.", variant: "destructive" }
+              );
             }}
           >
             Delete Past Search History
