@@ -369,14 +369,7 @@ function SettingsPanel({
 export default function Home() {
   const { theme, toggle } = useTheme();
   const { toast } = useToast();
-  const [yelpKey, setYelpKey] = useState(() => {
-    try {
-      return localStorage.getItem(YELP_KEY_STORAGE_KEY) || "";
-    } catch (error) {
-      console.warn("Could not load saved Yelp key from localStorage.", error);
-      return "";
-    }
-  });
+  const [yelpKey, setYelpKey] = useState("");
 
   // Filter state
   const [city, setCity]             = useState("Dearborn, MI");
@@ -445,9 +438,21 @@ export default function Home() {
 
   useEffect(() => {
     let mounted = true;
+    let savedYelpKey = "";
+    try {
+      savedYelpKey = (localStorage.getItem(YELP_KEY_STORAGE_KEY) || "").trim();
+      if (savedYelpKey) setYelpKey(savedYelpKey);
+    } catch (error) {
+      console.warn("Could not load saved Yelp key from localStorage.", error);
+    }
+
     getServerKeyStatus().then((status) => {
-      if (!mounted || !status) return;
-      setHasServerYelpKey(status.yelpConfigured);
+      if (!mounted) return;
+      const serverHasYelpKey = Boolean(status?.yelpConfigured);
+      setHasServerYelpKey(serverHasYelpKey);
+      if (savedYelpKey || serverHasYelpKey) {
+        setDataSource("yelp");
+      }
     });
     return () => { mounted = false; };
   }, []);
