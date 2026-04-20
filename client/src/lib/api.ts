@@ -231,6 +231,16 @@ export function getSearchHistory(): HistoryEntry[] {
   }
 }
 
+export function clearSearchHistory(): boolean {
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+    return true;
+  } catch {
+    /* storage unavailable */
+    return false;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // OVERPASS (OpenStreetMap) — free, full CORS
 // ══════════════════════════════════════════════════════════════════════════════
