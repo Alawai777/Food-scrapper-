@@ -395,6 +395,8 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(false);
   const [errorMsg, setErrorMsg]       = useState("");
   const [showFilters, setShowFilters] = useState(true);
+  const [checksPerSearch, setChecksPerSearch] = useState<number | null>(null);
+  const [searchEndpoint, setSearchEndpoint] = useState("");
 
   const togglePrice = (id: string) =>
     setPriceRange(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -424,11 +426,15 @@ export default function Home() {
     onSuccess: (data: SearchResult) => {
       if (data.error) setErrorMsg(data.error);
       setResults(data.results || []);
+      setChecksPerSearch(typeof data.checksPerSearch === "number" ? data.checksPerSearch : null);
+      setSearchEndpoint(data.endpoint || "");
       setHasSearched(true);
       setShowFilters(false);
     },
     onError: () => {
       setErrorMsg("Connection error. Please try again.");
+      setChecksPerSearch(null);
+      setSearchEndpoint("");
       setHasSearched(true);
     },
   });
@@ -725,7 +731,7 @@ export default function Home() {
                 {results.length} spots
                 <span className="text-muted-foreground font-normal text-sm ml-2">in {city}</span>
               </h2>
-              <div className="flex flex-wrap gap-1.5 text-xs">
+              <div className="flex flex-wrap gap-1.5 text-xs items-center">
                 {halal && <span style={{ background: "hsl(var(--halal-bg))", color: "hsl(var(--halal-text))" }} className="px-2.5 py-1 rounded-full font-semibold">☪️ Halal</span>}
                 {openNow && <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2.5 py-1 rounded-full font-semibold">🟢 Open Now</span>}
                 <span className="bg-secondary text-foreground px-2.5 py-1 rounded-full font-semibold">{selectedDining?.icon} {selectedDining?.label}</span>
@@ -733,6 +739,12 @@ export default function Home() {
                 <span className={`px-2.5 py-1 rounded-full font-semibold ${dataSource === "google" ? "google-badge" : dataSource === "yelp" ? "yelp-badge" : "osm-badge"}`}>
                   {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : "OSM"}
                 </span>
+                {dataSource === "osm" && checksPerSearch !== null && (
+                  <span className="text-muted-foreground">
+                    {checksPerSearch} overpass check{checksPerSearch === 1 ? "" : "s"}
+                    {searchEndpoint ? ` (${searchEndpoint.replace(/^https?:\/\//, "").split("/")[0]})` : ""}
+                  </span>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -751,6 +763,12 @@ export default function Home() {
                 ? "Try a different genre, city, or switch to another data source."
                 : 'Try a different genre, city, or data source.'}
             </p>
+            {dataSource === "osm" && checksPerSearch !== null && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Search used {checksPerSearch} overpass check{checksPerSearch === 1 ? "" : "s"}
+                {searchEndpoint ? ` (${searchEndpoint.replace(/^https?:\/\//, "").split("/")[0]})` : ""}.
+              </p>
+            )}
           </div>
         )}
 
