@@ -827,7 +827,7 @@ export async function searchRestaurants(
 
   try {
     let results: Restaurant[];
-    let checksPerSearch = 1;
+    let checksPerSearch: number | undefined;
     let endpoint = "";
 
     if (dataSource === "yelp") {

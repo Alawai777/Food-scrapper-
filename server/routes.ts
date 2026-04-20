@@ -587,7 +587,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
     try {
       let results: Restaurant[];
-      let checksPerSearch = 1;
+      let checksPerSearch: number | undefined;
       let endpoint = "";
 
       if (source === "yelp") {
