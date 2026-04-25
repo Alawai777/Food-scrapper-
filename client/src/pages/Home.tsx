@@ -581,8 +581,16 @@ export default function Home() {
 
     getServerKeyStatus().then((status) => {
       if (!mounted) return;
-      setHasServerYelpKey(Boolean(status?.yelpConfigured));
-      setHasServerGoogleKey(Boolean(status?.googleConfigured));
+      const serverYelp = Boolean(status?.yelpConfigured);
+      const serverGoogle = Boolean(status?.googleConfigured);
+      setHasServerYelpKey(serverYelp);
+      setHasServerGoogleKey(serverGoogle);
+      // If the server already has a Yelp key and the user hasn't saved a local key,
+      // dismiss the prompt and switch to Yelp automatically.
+      if (serverYelp && !savedYelpKey) {
+        setShowApiKeyPrompt(false);
+        setDataSource("yelp");
+      }
     });
     return () => { mounted = false; };
   }, []);
