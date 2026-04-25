@@ -378,6 +378,110 @@ function SettingsPanel({
   );
 }
 
+// ── Yelp API Key Prompt Modal ─────────────────────────────────────────────────
+function YelpApiPromptModal({
+  open, onSave, onSkip,
+}: {
+  open: boolean;
+  onSave: (key: string) => void;
+  onSkip: () => void;
+}) {
+  const [draftKey, setDraftKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [status, setStatus] = useState<"idle" | "valid" | "invalid">("idle");
+  const { toast } = useToast();
+
+  const handleTest = async () => {
+    if (!draftKey.trim()) return;
+    setTesting(true); setStatus("idle");
+    try {
+      const data = await validateYelpKey(draftKey.trim());
+      if (data.valid) {
+        setStatus("valid");
+      } else {
+        setStatus("invalid");
+        toast({ title: "Invalid Yelp key", description: data.error || "Check your key.", variant: "destructive" });
+      }
+    } catch { setStatus("invalid"); }
+    setTesting(false);
+  };
+
+  const handleSave = () => {
+    if (!draftKey.trim()) return;
+    onSave(draftKey.trim());
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="relative bg-card border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
+        onClick={e => e.stopPropagation()}>
+        <div className="text-center space-y-1">
+          <div className="text-3xl mb-2">🍽️</div>
+          <h2 className="font-bold text-foreground text-lg">Welcome to YartedEats!</h2>
+          <p className="text-sm text-muted-foreground">
+            Enter your <strong>Yelp Fusion API key</strong> to unlock ratings, photos, and rich restaurant data.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Get a free key at{" "}
+            <a href="https://www.yelp.com/developers/v3/manage_app" target="_blank" rel="noopener noreferrer"
+              className="text-primary hover:underline font-medium">yelp.com/developers</a>.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <div className="relative">
+            <Input
+              type={showKey ? "text" : "password"}
+              placeholder="Paste your Yelp API key…"
+              value={draftKey}
+              onChange={e => { setDraftKey(e.target.value); setStatus("idle"); }}
+              className="pr-9 bg-background font-mono text-xs"
+              data-testid="prompt-yelp-key"
+            />
+            <button onClick={() => setShowKey(v => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          {status === "valid" && (
+            <p className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Key is valid
+            </p>
+          )}
+          {status === "invalid" && (
+            <p className="text-xs text-destructive font-semibold flex items-center gap-1">
+              <XCircle className="w-3.5 h-3.5" /> Invalid key — check and try again
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleTest}
+              disabled={testing || !draftKey.trim()} className="flex-1">
+              {testing ? "Testing…" : "Test Key"}
+            </Button>
+            <Button size="sm" onClick={handleSave}
+              disabled={!draftKey.trim()} className="flex-1">
+              Save & Use Yelp
+            </Button>
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-3 text-center">
+          <button onClick={onSkip}
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
+            Skip — use OpenStreetMap (free, no key needed)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -405,6 +509,7 @@ export default function Home() {
   const [hasServerYelpKey, setHasServerYelpKey] = useState(false);
   const [hasServerGoogleKey, setHasServerGoogleKey] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showApiKeyPrompt, setShowApiKeyPrompt] = useState(false);
 
   // Results
   const [results, setResults]         = useState<Restaurant[]>([]);
@@ -463,20 +568,21 @@ export default function Home() {
     let savedYelpKey = "";
     try {
       savedYelpKey = (localStorage.getItem(YELP_KEY_STORAGE_KEY) || "").trim();
-      if (savedYelpKey) setYelpKey(savedYelpKey);
+      if (savedYelpKey) {
+        setYelpKey(savedYelpKey);
+        setDataSource("yelp");
+      } else {
+        setShowApiKeyPrompt(true);
+      }
     } catch (error) {
       console.warn("Could not load saved Yelp key from localStorage.", error);
+      setShowApiKeyPrompt(true);
     }
 
     getServerKeyStatus().then((status) => {
       if (!mounted) return;
-      const serverHasYelpKey = Boolean(status?.yelpConfigured);
-      const serverHasGoogleKey = Boolean(status?.googleConfigured);
-      setHasServerYelpKey(serverHasYelpKey);
-      setHasServerGoogleKey(serverHasGoogleKey);
-      if (savedYelpKey || serverHasYelpKey) {
-        setDataSource("yelp");
-      }
+      setHasServerYelpKey(Boolean(status?.yelpConfigured));
+      setHasServerGoogleKey(Boolean(status?.googleConfigured));
     });
     return () => { mounted = false; };
   }, []);
@@ -492,6 +598,18 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
+
+      {/* Yelp API key prompt shown on first visit */}
+      <YelpApiPromptModal
+        open={showApiKeyPrompt}
+        onSave={(key) => {
+          setYelpKey(key);
+          setDataSource("yelp");
+          setShowApiKeyPrompt(false);
+          toast({ title: "Yelp key saved", description: "Searching with Yelp data." });
+        }}
+        onSkip={() => setShowApiKeyPrompt(false)}
+      />
 
       {/* Settings modal */}
       <SettingsPanel open={showSettings} onClose={() => setShowSettings(false)}
@@ -568,20 +686,16 @@ export default function Home() {
                 </button>
                 <button data-testid="chip-source-yelp" onClick={() => {
                   if (!yelpKey.trim()) {
-                    toast({
-                      title: "Yelp selected",
-                      description: hasServerYelpKey
-                        ? "Using server-side Yelp key in the background."
-                        : "No local Yelp key needed. Configure YELP_API_KEY on the server for background Yelp search.",
-                    });
+                    setShowApiKeyPrompt(true);
+                    return;
                   }
                   setDataSource("yelp");
                 }}
                   className={`chip ${dataSource === "yelp" ? "active-yelp" : ""}`}>
                   <Zap className="w-3.5 h-3.5" /> Yelp
-                  {(yelpKey.trim() || hasServerYelpKey)
+                  {yelpKey.trim()
                     ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
-                    : <span className="text-[10px] font-medium ml-1 opacity-50">background</span>
+                    : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
                   }
                 </button>
                 <button data-testid="chip-source-google" onClick={() => {
