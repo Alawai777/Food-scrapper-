@@ -134,6 +134,7 @@ const OVERPASS_URLS = [
 const YELP_BASE = "https://api.yelp.com/v3";
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
 const CORS_PROXY = "https://corsproxy.io/?url=";
+const OVERPASS_TIMEOUT_MS = 10000;
 
 function haversineDistanceMiles(
   lat1: number,
@@ -328,18 +329,25 @@ async function searchOverpass(params: SearchParams): Promise<{
 
   for (const endpoint of OVERPASS_URLS) {
     checks += 1;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
     try {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
       });
       if (!response.ok) throw new Error(`Overpass error: ${response.status}`);
       data = await response.json();
       successfulEndpoint = endpoint;
       break;
     } catch (error) {
-      lastError = error;
+      lastError = error instanceof DOMException && error.name === "AbortError"
+        ? new Error(`Overpass request timed out after ${OVERPASS_TIMEOUT_MS / 1000}s`)
+        : error;
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
