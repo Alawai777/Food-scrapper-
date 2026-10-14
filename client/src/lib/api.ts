@@ -322,42 +322,41 @@ async function searchOverpass(params: SearchParams): Promise<{
 
   const query = buildOverpassQuery(bbox, amenityTypes, cuisineOsm, Boolean(halal));
 
-  let checks = 0;
-  let successfulEndpoint = "";
-  let data: { elements?: OsmElement[] } | null = null;
-  let lastError: unknown;
-
-  for (const endpoint of OVERPASS_URLS) {
-    checks += 1;
-    const controller = new AbortController();
+  const checks = OVERPASS_URLS.length;
+  const controllers = OVERPASS_URLS.map(() => new AbortController());
+  const requests = OVERPASS_URLS.map(async (endpoint, index) => {
+    const controller = controllers[index];
     const timeout = window.setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(query)}`,
+      // GET avoids browser preflight failures on static GitHub Pages hosting.
+      const response = await fetch(`${endpoint}?data=${encodeURIComponent(query)}`, {
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(`Overpass error: ${response.status}`);
-      data = await response.json();
-      successfulEndpoint = endpoint;
-      break;
-    } catch (error) {
-      lastError = error instanceof DOMException && error.name === "AbortError"
-        ? new Error(`Overpass request timed out after ${OVERPASS_TIMEOUT_MS / 1000}s`)
-        : error;
+      return {
+        endpoint,
+        data: await response.json() as { elements?: OsmElement[] },
+      };
     } finally {
       window.clearTimeout(timeout);
     }
-  }
+  });
 
-  if (!data) {
+  let successfulEndpoint = "";
+  let data: { elements?: OsmElement[] } | null = null;
+  try {
+    const winner = await Promise.any(requests);
+    successfulEndpoint = winner.endpoint;
+    data = winner.data;
+    controllers.forEach((controller, index) => {
+      if (OVERPASS_URLS[index] !== successfulEndpoint) controller.abort();
+    });
+  } catch {
     throw new Error(
-      `Overpass failed after ${checks} checks${
-        lastError instanceof Error ? `: ${lastError.message}` : ""
-      }`,
+      `Overpass is temporarily unavailable. Please try again in a moment.`,
     );
   }
+  if (!data) throw new Error("Overpass returned no data.");
 
   const centerLat = (bbox[0] + bbox[2]) / 2;
   const centerLon = (bbox[1] + bbox[3]) / 2;
