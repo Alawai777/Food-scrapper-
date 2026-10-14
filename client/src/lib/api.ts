@@ -4,9 +4,8 @@
  *
  * Data sources:
  *  - OpenStreetMap (Overpass API) — free, no key, full CORS support
- *  - Google Maps Places (New)      — needs API key, supports CORS
- *  - Yelp Fusion                   — needs API key, NO browser CORS support
- *                                    → uses corsproxy.io as a thin relay
+ *  - Google Maps Places (New)      — available through the optional backend
+ *  - Yelp Fusion                   — available through the optional backend
  */
 
 import {
@@ -56,8 +55,6 @@ export interface SearchParams {
   userLat?: number | null;
   userLon?: number | null;
   dataSource: "osm" | "yelp" | "google";
-  yelpApiKey?: string;
-  googleApiKey?: string;
 }
 
 export interface SearchResult {
@@ -131,10 +128,9 @@ const OVERPASS_URLS = [
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.openstreetmap.ru/api/interpreter",
 ];
+const OVERPASS_TIMEOUT_MS = 10000;
 const YELP_BASE = "https://api.yelp.com/v3";
 const GOOGLE_PLACES_BASE = "https://places.googleapis.com/v1";
-const CORS_PROXY = "https://corsproxy.io/?url=";
-const OVERPASS_TIMEOUT_MS = 10000;
 
 function haversineDistanceMiles(
   lat1: number,
@@ -390,7 +386,7 @@ async function searchOverpass(params: SearchParams): Promise<{
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// YELP FUSION — needs API key, no browser CORS → use corsproxy.io
+// YELP FUSION — available only through the optional Express backend
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function searchYelp(
@@ -443,7 +439,7 @@ async function searchYelp(
   ).toString();
 
   const targetUrl = `${YELP_BASE}/businesses/search?${qs}`;
-  const response = await fetch(`${CORS_PROXY}${encodeURIComponent(targetUrl)}`, {
+  const response = await fetch(targetUrl, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 
@@ -620,7 +616,7 @@ async function searchGoogle(
     let imageUrl = "";
     if (p.photos && p.photos.length > 0) {
       const photoName = p.photos[0].name;
-      imageUrl = `${GOOGLE_PLACES_BASE}/${photoName}/media?key=${apiKey}&maxWidthPx=600&maxHeightPx=400`;
+      imageUrl = "";
     }
 
     const nameStr = p.displayName?.text || "";
@@ -687,7 +683,7 @@ export async function validateYelpKey(
   if (!key.trim()) return { valid: false, error: "No key provided" };
   try {
     const targetUrl = `${YELP_BASE}/businesses/search?location=Dearborn%2C+MI&limit=1`;
-    const res = await fetch(`${CORS_PROXY}${encodeURIComponent(targetUrl)}`, {
+    const res = await fetch(targetUrl, {
       headers: { Authorization: `Bearer ${key}` },
     });
     if (res.status === 401) return { valid: false, error: "Invalid API key" };
@@ -800,7 +796,7 @@ async function searchViaBackend(params: SearchParams): Promise<SearchResult | nu
 export async function searchRestaurants(
   params: SearchParams,
 ): Promise<SearchResult> {
-  const { dataSource, yelpApiKey, googleApiKey } = params;
+  const { dataSource } = params;
 
   try {
     let results: Restaurant[];
@@ -808,7 +804,7 @@ export async function searchRestaurants(
     let endpoint = "";
 
     if (dataSource === "yelp") {
-      const trimmedYelpKey = yelpApiKey?.trim();
+      const trimmedYelpKey = "";
       const backendResult = await searchViaBackend(params);
       if (backendResult && !backendResult.error) {
         saveSearchHistory({
@@ -828,7 +824,7 @@ export async function searchRestaurants(
             ...backendResult,
             error: hasKeyHint
               ? backendResult.error
-              : "Yelp search failed via server and no local Yelp key is set. Paste one in Settings or set YELP_API_KEY.",
+              : "Yelp search requires the Express server with YELP_API_KEY configured.",
           };
         }
 
@@ -844,7 +840,7 @@ export async function searchRestaurants(
       // Static/no-backend mode fallback (or backend error with a client key available).
       results = await searchYelp(params, trimmedYelpKey);
     } else if (dataSource === "google") {
-      const trimmedGoogleKey = googleApiKey?.trim();
+      const trimmedGoogleKey = "";
       const backendResult = await searchViaBackend(params);
       if (backendResult && !backendResult.error) {
         saveSearchHistory({
@@ -864,7 +860,7 @@ export async function searchRestaurants(
             ...backendResult,
             error: hasKeyHint
               ? backendResult.error
-              : "Google search failed via server and no local Google key is set. Paste one in Settings or set GOOGLE_MAPS_API_KEY.",
+              : "Google search requires the Express server with GOOGLE_MAPS_API_KEY configured.",
           };
         }
 
@@ -873,7 +869,7 @@ export async function searchRestaurants(
           source: "google",
           total: 0,
           error:
-            "Google search is unavailable right now. Set GOOGLE_MAPS_API_KEY on the server or paste a key in Settings.",
+            "Google search requires the Express server with GOOGLE_MAPS_API_KEY configured.",
         };
       }
       results = await searchGoogle(params, trimmedGoogleKey);

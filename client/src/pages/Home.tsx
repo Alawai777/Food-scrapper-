@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -33,28 +33,6 @@ import {
 
 type Source = "osm" | "yelp" | "google";
 type Sort = "value" | "rating" | "distance";
-
-const KEY_STORAGE = {
-  yelp: "yartedeats_yelp_key",
-  google: "yartedeats_google_key",
-} as const;
-
-function readStoredKey(key: string): string {
-  try {
-    return localStorage.getItem(key) || "";
-  } catch {
-    return "";
-  }
-}
-
-function writeStoredKey(key: string, value: string): void {
-  try {
-    if (value) localStorage.setItem(key, value);
-    else localStorage.removeItem(key);
-  } catch {
-    // Storage can be unavailable in privacy-restricted browsers.
-  }
-}
 
 function SourcePill({ source }: { source: Source }) {
   const labels = { osm: "OpenStreetMap", yelp: "Yelp", google: "Google Places" };
@@ -134,23 +112,12 @@ function RestaurantCard({ restaurant }: { restaurant: Restaurant }) {
 function SettingsPanel({
   open,
   onClose,
-  yelpKey,
-  googleKey,
-  setYelpKey,
-  setGoogleKey,
 }: {
   open: boolean;
   onClose: () => void;
-  yelpKey: string;
-  googleKey: string;
-  setYelpKey: (value: string) => void;
-  setGoogleKey: (value: string) => void;
 }) {
-  const firstInputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     if (!open) return;
-    firstInputRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
@@ -163,14 +130,12 @@ function SettingsPanel({
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <div className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
-          <div><p className="eyebrow">Optional connections</p><h2 id="settings-title">Bring your own keys</h2></div>
+          <div><p className="eyebrow">Search sources</p><h2 id="settings-title">Static site mode</h2></div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close settings"><X /></button>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          OpenStreetMap is always free. Keys stay in this browser and are only used when you choose a paid-data source.
+          OpenStreetMap is always free and works directly in this browser. Yelp and Google searches require the optional Express server with the provider keys configured there; this static site never stores provider keys.
         </p>
-        <label className="field-label" htmlFor="yelp-api-key">Yelp Fusion API key<input ref={firstInputRef} id="yelp-api-key" type="password" value={yelpKey} onChange={(e) => setYelpKey(e.target.value)} placeholder="Optional" /></label>
-        <label className="field-label" htmlFor="google-api-key">Google Places API key<input id="google-api-key" type="password" value={googleKey} onChange={(e) => setGoogleKey(e.target.value)} placeholder="Optional" /></label>
         <button type="button" className="button button-primary w-full" onClick={onClose}>Done</button>
       </div>
     </div>
@@ -190,8 +155,6 @@ export default function Home() {
   const [openNow, setOpenNow] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [yelpKey, setYelpKey] = useState("");
-  const [googleKey, setGoogleKey] = useState("");
   const [results, setResults] = useState<Restaurant[]>([]);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
@@ -199,13 +162,6 @@ export default function Home() {
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locationMessage, setLocationMessage] = useState("");
-
-  useEffect(() => {
-    setYelpKey(readStoredKey(KEY_STORAGE.yelp));
-    setGoogleKey(readStoredKey(KEY_STORAGE.google));
-  }, []);
-  useEffect(() => { writeStoredKey(KEY_STORAGE.yelp, yelpKey); }, [yelpKey]);
-  useEffect(() => { writeStoredKey(KEY_STORAGE.google, googleKey); }, [googleKey]);
 
   const sortedResults = useMemo(() => [...results].sort((a, b) => {
     if (sort === "value") {
@@ -226,8 +182,6 @@ export default function Home() {
       halal, openNow, sortBy: sort, dataSource: source,
       userLat: location?.lat,
       userLon: location?.lon,
-      yelpApiKey: source === "yelp" ? yelpKey : undefined,
-      googleApiKey: source === "google" ? googleKey : undefined,
     }),
     onSuccess: (data) => {
       setResults(data.results || []);
@@ -315,7 +269,7 @@ export default function Home() {
         </section>
       </main>
       <footer className="site-footer"><span>Made for hungry people in Metro Detroit.</span><span>Data from public sources · Always verify hours and pricing before heading out.</span></footer>
-      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} yelpKey={yelpKey} googleKey={googleKey} setYelpKey={setYelpKey} setGoogleKey={setGoogleKey} />
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
