@@ -1,4 +1,4 @@
-# YartedEats 🍽️
+# forkfinder 🍽️
 
 A Metro Detroit restaurant discovery web app that aggregates data from **OpenStreetMap**, **Yelp**, and **Google Maps** to help you find your next meal.
 
@@ -10,7 +10,7 @@ A Metro Detroit restaurant discovery web app that aggregates data from **OpenStr
 
 ### Add to Home Screen (iOS / Android)
 
-YartedEats is a **Progressive Web App (PWA)** — you can install it like a native app:
+forkfinder is a **Progressive Web App (PWA)** — you can install it like a native app:
 
 - **iPhone / iPad**: Open the link in Safari → tap the **Share** button → **Add to Home Screen**
 - **Android**: Open the link in Chrome → tap the **⋮ menu** → **Add to Home Screen** (or accept the install prompt)
@@ -22,11 +22,11 @@ Once added, it launches full-screen like a native app — no App Store needed.
 
 - **Multi-source search** — Query restaurants from OpenStreetMap (free), Yelp Fusion API, or Google Maps Places API
 - **Rich filtering** — City/neighborhood, cuisine genre, dining style (dine-in/pickup/food trucks), group size, price range, halal-only, and open-now
-- **15 Metro Detroit cities** — Dearborn, Detroit, Ann Arbor, Troy, and more
+- **Metro Detroit coverage** — Canton, Dearborn, Detroit, Ann Arbor, Troy, and more
 - **13 cuisine genres** — Middle Eastern, American, Italian, Mexican, Asian, Pizza, Seafood, Mediterranean, Indian, BBQ, Breakfast, Desserts
-- **Location-aware sorting** — Sort by distance using your geolocation
+- **Location-aware sorting** — Opt in to browser location for distance sorting, with city-center fallback
 - **Dark/light theme** — Toggle between color modes
-- **Works offline** — Basic offline shell via service worker
+- **Works offline** — Basic offline shell via service worker; live searches still require an internet connection
 - **Runs anywhere** — Static site, no backend server needed
 
 ## Tech Stack
@@ -74,14 +74,12 @@ npm run check
 
 ## API Keys
 
-YartedEats works out of the box with **OpenStreetMap** (no API key needed). For richer data (photos, ratings, reviews):
+forkfinder works out of the box with **OpenStreetMap** (no API key needed). For richer data (photos, ratings, reviews):
 
 - **Yelp Fusion API** — Get a free key at [yelp.com/developers](https://www.yelp.com/developers/v3/manage_app)
 - **Google Maps Places API** — Get a key at [Google Cloud Console](https://console.cloud.google.com/apis/credentials) ($200/mo free credit)
 
 Enter your keys in the ⚙️ Settings panel within the app. The Yelp key is saved in browser storage so you don't need to re-enter it every visit.
-You can also remove past local search history from the same Settings panel using **Delete Past Search History**.
-
 If you're running the Express server, you can set `YELP_API_KEY` and/or `GOOGLE_MAPS_API_KEY` as environment variables, and those keys will be used by backend searches.
 
 > **🔒 API Key Security:** Since this is primarily a client-side app, API keys may be used in the browser. For **Google Maps**, [restrict your key](https://cloud.google.com/docs/authentication/api-keys#securing_an_api_key) to your domain in Google Cloud Console. **Yelp** searches now use the backend route first when available (server-side key), with browser/CORS-proxy fallback for static mode.
@@ -93,7 +91,7 @@ The app runs **entirely in your browser** — no backend server required:
 1. **OpenStreetMap** searches go directly to the [Overpass API](https://overpass-api.de/) (free, full CORS support)
 2. **Google Maps** searches go directly to the [Places API](https://developers.google.com/maps/documentation/places/web-service) (supports CORS with your API key)
 3. **Yelp** searches use the backend `/api/search` route first (for server-side key usage), and fall back to CORS proxy mode for static/no-backend deployments
-4. Search history is saved in **localStorage** (stays on your device)
+4. Provider keys are saved locally only when you choose to use them; the public API does not expose server-wide search history
 
 ### Overpass reliability + per-search checks
 

@@ -14,6 +14,7 @@ import {
   CUISINE_GENRES,
   DINING_STYLES,
 } from "@shared/schema";
+import { checkOpenNow } from "@shared/hours";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -159,48 +160,6 @@ function formatDistance(
 ): string {
   if (!refLat || !refLon || !lat || !lon) return "";
   return haversineDistanceMiles(refLat, refLon, lat, lon).toFixed(1) + " mi";
-}
-
-function checkOpenNow(hoursStr: string): boolean | null {
-  try {
-    const now = new Date();
-    const day = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][now.getDay()];
-    const timeNow = now.getHours() * 60 + now.getMinutes();
-    if (hoursStr.trim() === "24/7") return true;
-    const segments = hoursStr.split(";").map((s) => s.trim());
-    for (const seg of segments) {
-      const match = seg.match(/^([\w,\-]+)\s+(\d+:\d+)-(\d+:\d+)/);
-      if (!match) continue;
-      const [, daysPart, open, close] = match;
-      const dayRanges = daysPart.split(",");
-      let dayMatches = false;
-      for (const dr of dayRanges) {
-        if (dr.includes("-")) {
-          const days = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-          const [sd, ed] = dr.split("-");
-          const si = days.indexOf(sd),
-            ei = days.indexOf(ed),
-            ci = days.indexOf(day);
-          if (si !== -1 && ei !== -1 && ci !== -1) {
-            if (si <= ei) {
-              if (ci >= si && ci <= ei) dayMatches = true;
-            } else {
-              if (ci >= si || ci <= ei) dayMatches = true;
-            }
-          }
-        } else if (dr === day) dayMatches = true;
-      }
-      if (dayMatches) {
-        const [oh, om] = open.split(":").map(Number);
-        const [ch, cm] = close.split(":").map(Number);
-        return timeNow >= oh * 60 + om && timeNow <= ch * 60 + cm;
-      }
-    }
-    return null;
-  } catch (error) {
-    console.warn("Could not parse opening hours string.", error);
-    return null;
-  }
 }
 
 // ── Search History (localStorage) ───────────────────────────────────────────

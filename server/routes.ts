@@ -3,6 +3,7 @@ import type { Server } from "http";
 import axios from "axios";
 import { storage } from "./storage";
 import { CITY_BBOXES, CUISINE_GENRES, DINING_STYLES } from "@shared/schema";
+import { checkOpenNow } from "@shared/hours";
 
 const OVERPASS_URLS = [
   "https://overpass-api.de/api/interpreter",
@@ -208,44 +209,6 @@ function osmToRestaurant(el: OsmElement, centerLat?: number, centerLon?: number)
     price: "",
     yelpUrl: "",
   };
-}
-
-function checkOpenNow(hoursStr: string): boolean | null {
-  try {
-    const now = new Date();
-    const day = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][now.getDay()];
-    const timeNow = now.getHours() * 60 + now.getMinutes();
-    if (hoursStr.trim() === "24/7") return true;
-    const segments = hoursStr.split(";").map(s => s.trim());
-    for (const seg of segments) {
-      const match = seg.match(/^([\w,\-]+)\s+(\d+:\d+)-(\d+:\d+)/);
-      if (!match) continue;
-      const [, daysPart, open, close] = match;
-      const dayRanges = daysPart.split(",");
-      let dayMatches = false;
-      for (const dr of dayRanges) {
-        if (dr.includes("-")) {
-          const days = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-          const [sd, ed] = dr.split("-");
-          const si = days.indexOf(sd), ei = days.indexOf(ed), ci = days.indexOf(day);
-          if (si !== -1 && ei !== -1 && ci !== -1) {
-            // Handle ranges that wrap around the week (e.g., Fr-Mo = Fr,Sa,Su,Mo)
-            if (si <= ei) {
-              if (ci >= si && ci <= ei) dayMatches = true;
-            } else {
-              if (ci >= si || ci <= ei) dayMatches = true;
-            }
-          }
-        } else if (dr === day) dayMatches = true;
-      }
-      if (dayMatches) {
-        const [oh, om] = open.split(":").map(Number);
-        const [ch, cm] = close.split(":").map(Number);
-        return timeNow >= oh * 60 + om && timeNow <= ch * 60 + cm;
-      }
-    }
-    return null;
-  } catch { return null; }
 }
 
 async function searchOverpass(params: SearchParams): Promise<{
@@ -557,8 +520,27 @@ async function searchGoogle(params: SearchParams, apiKey: string): Promise<Resta
 // ROUTES
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Track the last Google API key used so the photo proxy can access it
-let lastGoogleApiKey = "";
+const requestCounts = new Map<string, { count: number; resetAt: number }>();
+const SEARCH_WINDOW_MS = 60_000;
+const SEARCH_LIMIT = 30;
+
+function allowSearch(req: Request): boolean {
+  const now = Date.now();
+  if (requestCounts.size > 10_000) {
+    for (const [key, value] of requestCounts) {
+      if (value.resetAt <= now) requestCounts.delete(key);
+    }
+  }
+  const key = req.ip || req.socket.remoteAddress || "unknown";
+  const current = requestCounts.get(key);
+  if (!current || current.resetAt <= now) {
+    requestCounts.set(key, { count: 1, resetAt: now + SEARCH_WINDOW_MS });
+    return true;
+  }
+  if (current.count >= SEARCH_LIMIT) return false;
+  current.count += 1;
+  return true;
+}
 
 export function registerRoutes(httpServer: Server, app: Express) {
   app.get("/api/key-status", (_req, res) => {
@@ -570,20 +552,26 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   // Main search — supports OSM, Yelp, and Google
   app.post("/api/search", async (req, res) => {
+    if (!allowSearch(req)) {
+      return res.status(429).json({ error: "Too many searches. Please wait a minute and try again.", results: [] });
+    }
     const { city, genre, diningStyle, groupSize, priceRange, halal, openNow,
             sortBy, userLat, userLon, dataSource, yelpApiKey, googleApiKey } = req.body;
 
-    if (!city || !genre || !diningStyle) {
+    if (!city || !genre || !diningStyle || !Object.prototype.hasOwnProperty.call(CITY_BBOXES, city) ||
+        !CUISINE_GENRES.some((item) => item.id === genre) ||
+        !DINING_STYLES.some((item) => item.id === diningStyle)) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+    const parsedGroupSize = Number(groupSize);
+    if (!Number.isInteger(parsedGroupSize) || parsedGroupSize < 1 || parsedGroupSize > 100) {
+      return res.status(400).json({ error: "Group size must be a whole number from 1 to 100." });
     }
 
     const source = ["osm", "yelp", "google"].includes(dataSource) ? dataSource : "osm";
     // Resolve keys: request body > server env var
-    const resolvedYelpKey   = yelpApiKey   || process.env.YELP_API_KEY   || "";
-    const resolvedGoogleKey = googleApiKey || process.env.GOOGLE_MAPS_API_KEY || "";
-
-    // Store for photo proxy
-    if (resolvedGoogleKey) lastGoogleApiKey = resolvedGoogleKey;
+    const resolvedYelpKey   = process.env.YELP_API_KEY || yelpApiKey || "";
+    const resolvedGoogleKey = process.env.GOOGLE_MAPS_API_KEY || googleApiKey || "";
 
     try {
       let results: Restaurant[];
@@ -616,7 +604,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
       // Save search
       await storage.saveSearch({
         city, genre, diningStyle,
-        groupSize: Number(groupSize),
+        groupSize: parsedGroupSize,
         priceRange: priceRange || "all",
         halal: Boolean(halal),
         openNow: Boolean(openNow),
@@ -705,11 +693,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
     }
   });
 
-  app.get("/api/recent", async (_req, res) => {
-    const recent = await storage.getRecentSearches(6);
-    res.json(recent);
-  });
-
   // Google photo proxy — serves photos without exposing the API key to the client
   app.get("/api/google-photo", async (req: Request, res: Response) => {
     const ref = req.query.ref as string;
@@ -722,7 +705,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
       return res.status(400).json({ error: "Invalid photo reference format" });
     }
 
-    const apiKey = lastGoogleApiKey || process.env.GOOGLE_MAPS_API_KEY || "";
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY || "";
     if (!apiKey) {
       return res.status(400).json({ error: "No Google API key configured" });
     }

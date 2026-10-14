@@ -1,5 +1,5 @@
-/* YartedEats Service Worker — lightweight cache for offline shell */
-var CACHE_NAME = "yartedeats-v1";
+/* forkfinder Service Worker — lightweight cache for offline shell */
+var CACHE_NAME = "forkfinder-v2";
 
 self.addEventListener("install", function (event) {
   event.waitUntil(

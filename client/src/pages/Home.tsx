@@ -1,939 +1,309 @@
-import { useState, useCallback, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  Clock3,
+  Compass,
+  ExternalLink,
+  Filter,
+  Leaf,
+  MapPin,
+  Moon,
+  Navigation,
+  Search,
+  Settings2,
+  Sparkles,
+  Star,
+  Sun,
+  Utensils,
+  X,
+} from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import {
   searchRestaurants,
-  getServerKeyStatus,
-  validateYelpKey,
-  validateGoogleKey,
-  clearSearchHistory,
   type Restaurant,
   type SearchResult,
 } from "@/lib/api";
 import {
-  METRO_DETROIT_CITIES, CUISINE_GENRES, DINING_STYLES,
-  PRICE_RANGES, SORT_OPTIONS,
+  CUISINE_GENRES,
+  DINING_STYLES,
+  METRO_DETROIT_CITIES,
+  PRICE_RANGES,
 } from "@shared/schema";
-import {
-  MapPin, Users, Sun, Moon, Search, Phone, Globe, Clock,
-  CheckCircle2, XCircle, Navigation, SlidersHorizontal,
-  Leaf, Filter, Settings, Star, Eye, EyeOff, ExternalLink,
-  Database, Zap, X,
-} from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
 
-const YELP_KEY_STORAGE_KEY = "yartedeats_yelp_key";
+type Source = "osm" | "yelp" | "google";
+type Sort = "value" | "rating" | "distance";
 
-// ── Star rating ───────────────────────────────────────────────────────────────
-function StarRating({ rating }: { rating: number }) {
+const KEY_STORAGE = {
+  yelp: "yartedeats_yelp_key",
+  google: "yartedeats_google_key",
+} as const;
+
+function readStoredKey(key: string): string {
+  try {
+    return localStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredKey(key: string, value: string): void {
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch {
+    // Storage can be unavailable in privacy-restricted browsers.
+  }
+}
+
+function SourcePill({ source }: { source: Source }) {
+  const labels = { osm: "OpenStreetMap", yelp: "Yelp", google: "Google Places" };
+  return <span className={`source-pill source-${source}`}>{labels[source]}</span>;
+}
+
+function Rating({ value, count }: { value: number; count: number }) {
+  if (!value) return <span className="text-xs text-muted-foreground">No ratings yet</span>;
   return (
-    <span className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map(i => (
-        <Star key={i} className={`w-3.5 h-3.5 ${i <= Math.round(rating) ? "star-on fill-current" : "star-off"}`} />
-      ))}
+    <span className="flex items-center gap-1.5 text-sm font-bold">
+      <Star className="h-4 w-4 fill-current text-amber-500" />
+      {value.toFixed(1)}
+      <span className="font-normal text-muted-foreground">({count.toLocaleString()})</span>
     </span>
   );
 }
 
-// ── Badges ────────────────────────────────────────────────────────────────────
-function HalalBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
-      style={{ background: "hsl(var(--halal-bg))", color: "hsl(var(--halal-text))", border: "1px solid hsl(var(--halal-border))" }}>
-      ☪️ Halal
-    </span>
-  );
-}
-function VegBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
-      style={{ background: "hsl(var(--veg-bg))", color: "hsl(var(--veg-text))" }}>
-      <Leaf className="w-2.5 h-2.5" /> Veg
-    </span>
-  );
-}
-function OpenBadge({ isOpen }: { isOpen: boolean | null }) {
-  if (isOpen === null) return null;
-  return (
-    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isOpen ? "bg-green-600/90 text-white" : "bg-black/55 text-white/75"}`}>
-      {isOpen ? "Open" : "Closed"}
-    </span>
-  );
-}
-function SourceBadge({ source }: { source: string }) {
-  if (source === "yelp") return <span className="yelp-badge">Yelp</span>;
-  if (source === "google") return <span className="google-badge">Google</span>;
-  return <span className="osm-badge">OSM</span>;
-}
-
-// ── Restaurant Card ───────────────────────────────────────────────────────────
-function RestaurantCard({ r }: { r: Restaurant }) {
-  const isYelp = r.source === "yelp";
-  const isGoogle = r.source === "google";
-  const hasRichData = isYelp || isGoogle;
-  const amenityLabel: Record<string, string> = {
-    restaurant: "🍽️ Dine In", fast_food: "🥡 Pick Up",
-    food_truck: "🚚 Food Truck", cafe: "☕ Café",
-  };
+function RestaurantCard({ restaurant }: { restaurant: Restaurant }) {
+  const r = restaurant;
+  const links = [
+    r.mapsLink && { href: r.mapsLink, label: "Map" },
+    r.website && { href: r.website, label: "Website" },
+    r.yelpUrl && { href: r.yelpUrl, label: "Yelp" },
+    r.googleMapsUrl && { href: r.googleMapsUrl, label: "Google Maps" },
+  ].filter(Boolean) as Array<{ href: string; label: string }>;
 
   return (
-    <div className="result-card bg-card border border-border rounded-2xl overflow-hidden" data-testid={`card-restaurant-${r.id}`}>
-      {/* Image / Map header */}
-      <div className="h-44 bg-muted relative overflow-hidden flex items-center justify-center">
-        {hasRichData && r.imageUrl ? (
-          <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" loading="lazy" />
-        ) : r.lat && r.lon ? (
-          <img
-            src={`https://static-maps.yandex.ru/1.x/?lang=en_US&ll=${r.lon},${r.lat}&z=16&l=map&size=450,200`}
-            alt="Map" className="w-full h-full object-cover opacity-80" loading="lazy"
-            onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
+    <article className="food-card" data-testid={`card-restaurant-${r.id}`}>
+      <div className="food-card__visual">
+        {r.imageUrl ? (
+          <img src={r.imageUrl} alt="" loading="lazy" />
         ) : (
-          <span className="text-5xl">🍽️</span>
+          <div className="food-card__placeholder"><Utensils /></div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-        <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-          {r.price && <span className="text-xs font-bold bg-black/70 text-white px-2 py-0.5 rounded-full">{r.price}</span>}
-          {r.isHalal && <HalalBadge />}
-          {r.isVegetarian && <VegBadge />}
+        <div className="food-card__visual-overlay" />
+        <div className="food-card__badges">
+          {r.price && <span className="price-badge">{r.price}</span>}
+          {r.isHalal && <span className="diet-badge">☪ Halal</span>}
+          {r.isVegetarian && <span className="diet-badge"><Leaf /> Veg</span>}
         </div>
-        <div className="absolute top-2 right-2 flex gap-1">
-          <OpenBadge isOpen={r.isOpen} />
+        {r.isOpen !== null && (
+          <span className={`open-badge ${r.isOpen ? "is-open" : "is-closed"}`}>
+            {r.isOpen ? "Open now" : "Closed"}
+          </span>
+        )}
+        <span className="card-source"><SourcePill source={r.source} /></span>
+      </div>
+      <div className="food-card__body">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-extrabold tracking-tight">{r.name}</h3>
+            <p className="mt-1 truncate text-sm capitalize text-muted-foreground">
+              {r.cuisine || "Local favorite"}
+            </p>
+          </div>
+          <Rating value={r.rating} count={r.reviewCount} />
         </div>
-        {r.amenity && (
-          <div className="absolute bottom-2 left-2">
-            <span className="text-xs font-semibold bg-black/60 text-white px-2 py-0.5 rounded-full">
-              {amenityLabel[r.amenity] || "🍽️ Restaurant"}
-            </span>
+        <div className="food-card__meta">
+          {r.distance && <span><Navigation /> {r.distance}</span>}
+          {r.address && <span className="truncate"><MapPin /> {r.address}</span>}
+          {r.openingHours && <span className="truncate"><Clock3 /> {r.openingHours}</span>}
+        </div>
+        {links.length > 0 && (
+          <div className="food-card__links">
+            {links.slice(0, 2).map((link) => (
+              <a key={link.href} href={link.href} target="_blank" rel="noreferrer">
+                {link.label} <ExternalLink />
+              </a>
+            ))}
           </div>
         )}
       </div>
-
-      <div className="p-4 space-y-2">
-        <div>
-          <h3 className="font-bold text-foreground text-sm leading-snug">{r.name}</h3>
-          {r.cuisine && <p className="text-muted-foreground text-xs mt-0.5 capitalize line-clamp-1">{r.cuisine}</p>}
-        </div>
-
-        {/* Rating — Yelp & Google */}
-        {hasRichData && r.rating > 0 && (
-          <div className="flex items-center gap-2">
-            <StarRating rating={r.rating} />
-            <span className="text-sm font-semibold text-foreground">{r.rating.toFixed(1)}</span>
-            <span className="text-xs text-muted-foreground">({r.reviewCount?.toLocaleString()})</span>
-          </div>
-        )}
-
-        <div className="space-y-1 text-xs text-muted-foreground">
-          {r.address && (
-            <div className="flex items-start gap-1.5">
-              <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
-              <span className="line-clamp-1">{r.address}</span>
-            </div>
-          )}
-          {r.distance && (
-            <div className="flex items-center gap-1.5">
-              <Navigation className="w-3.5 h-3.5 shrink-0 text-primary" />
-              <span>{r.distance} away</span>
-            </div>
-          )}
-          {r.phone && (
-            <div className="flex items-center gap-1.5">
-              <Phone className="w-3.5 h-3.5 shrink-0 text-primary" />
-              <a href={`tel:${r.phone}`} className="hover:text-primary hover:underline">{r.phone}</a>
-            </div>
-          )}
-          {r.openingHours && (
-            <div className="flex items-start gap-1.5">
-              <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
-              <span className="line-clamp-1">{r.openingHours}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 pt-1 flex-wrap">
-          {r.mapsLink && (
-            <a href={r.mapsLink} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-primary font-semibold hover:underline">
-              <MapPin className="w-3 h-3" /> Maps
-            </a>
-          )}
-          {r.website && (
-            <a href={r.website} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-primary font-semibold hover:underline">
-              <Globe className="w-3 h-3" /> Website
-            </a>
-          )}
-          {isYelp && r.yelpUrl && (
-            <a href={r.yelpUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: "#d32323" }}>
-              <ExternalLink className="w-3 h-3" /> Yelp
-            </a>
-          )}
-          {isGoogle && r.googleMapsUrl && (
-            <a href={r.googleMapsUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: "#4285f4" }}>
-              <ExternalLink className="w-3 h-3" /> Google
-            </a>
-          )}
-          <span className="ml-auto"><SourceBadge source={r.source} /></span>
-        </div>
-      </div>
-    </div>
+    </article>
   );
 }
 
-function SkeletonCard() {
-  return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden">
-      <Skeleton className="h-44 w-full rounded-none" />
-      <div className="p-4 space-y-2">
-        <Skeleton className="h-5 w-3/4" /><Skeleton className="h-3 w-1/2" />
-        <Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-2/3" />
-      </div>
-    </div>
-  );
-}
-
-function FilterLabel({ children }: { children: React.ReactNode }) {
-  return <p className="label-xs mb-2">{children}</p>;
-}
-
-// ── Key Input Section ──────────────────────────────────────────────────────────
-function ApiKeyInput({
-  label, helpText, helpUrl, helpLinkText, placeholder,
-  value, onChange, onTest, testing, status, testId,
-}: {
-  label: string; helpText: string; helpUrl: string; helpLinkText: string;
-  placeholder: string; value: string; onChange: (v: string) => void;
-  onTest: () => void; testing: boolean; status: "idle" | "valid" | "invalid";
-  testId: string;
-}) {
-  const [showKey, setShowKey] = useState(false);
-  return (
-    <div className="space-y-3">
-      <p className="label-xs">{label}</p>
-      <p className="text-xs text-muted-foreground -mt-1">
-        Get a free key at{" "}
-        <a href={helpUrl} target="_blank" rel="noopener noreferrer"
-          className="text-primary hover:underline font-medium">{helpLinkText}</a>.
-        {" "}{helpText}
-      </p>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Input
-            type={showKey ? "text" : "password"}
-            placeholder={placeholder}
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            className="pr-9 bg-background font-mono text-xs"
-            data-testid={testId}
-          />
-          <button onClick={() => setShowKey(!showKey)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-            {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-        <Button size="sm" variant="outline" onClick={onTest} disabled={testing || !value.trim()}
-          data-testid={`${testId}-test`} className="shrink-0">
-          {testing ? "Testing…" : "Test"}
-        </Button>
-      </div>
-      {status === "valid" && (
-        <p className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
-          <CheckCircle2 className="w-3.5 h-3.5" /> Key is valid
-        </p>
-      )}
-      {status === "invalid" && (
-        <p className="text-xs text-destructive font-semibold flex items-center gap-1">
-          <XCircle className="w-3.5 h-3.5" /> Invalid key — check and try again
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ── Settings Panel ────────────────────────────────────────────────────────────
 function SettingsPanel({
-  open, onClose, yelpKey, setYelpKey, googleKey, setGoogleKey,
-}: {
-  open: boolean; onClose: () => void;
-  yelpKey: string; setYelpKey: (k: string) => void;
-  googleKey: string; setGoogleKey: (k: string) => void;
-}) {
-  const [yelpTesting, setYelpTesting] = useState(false);
-  const [yelpStatus, setYelpStatus] = useState<"idle" | "valid" | "invalid">("idle");
-  const [googleTesting, setGoogleTesting] = useState(false);
-  const [googleStatus, setGoogleStatus] = useState<"idle" | "valid" | "invalid">("idle");
-  const { toast } = useToast();
-
-  const testYelpKey = async () => {
-    if (!yelpKey.trim()) return;
-    setYelpTesting(true); setYelpStatus("idle");
-    try {
-      const data = await validateYelpKey(yelpKey.trim());
-      if (data.valid) {
-        setYelpStatus("valid");
-        toast({ title: "Yelp key is valid", description: "You can now search with Yelp data." });
-      } else {
-        setYelpStatus("invalid");
-        toast({ title: "Invalid Yelp key", description: data.error || "Check your key.", variant: "destructive" });
-      }
-    } catch { setYelpStatus("invalid"); }
-    setYelpTesting(false);
-  };
-
-  const testGoogleKey = async () => {
-    if (!googleKey.trim()) return;
-    setGoogleTesting(true); setGoogleStatus("idle");
-    try {
-      const data = await validateGoogleKey(googleKey.trim());
-      if (data.valid) {
-        setGoogleStatus("valid");
-        toast({ title: "Google key is valid", description: "You can now search with Google Maps data." });
-      } else {
-        setGoogleStatus("invalid");
-        toast({ title: "Invalid Google key", description: data.error || "Check your key.", variant: "destructive" });
-      }
-    } catch { setGoogleStatus("invalid"); }
-    setGoogleTesting(false);
-  };
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-5 max-h-[80vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-foreground text-base flex items-center gap-2">
-            <Settings className="w-4.5 h-4.5 text-primary" /> Settings
-          </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Google Maps key */}
-        <ApiKeyInput
-          label="Google Maps API Key"
-          helpText="Adds photos, ratings, reviews, hours, and price. $200/mo free credit."
-          helpUrl="https://console.cloud.google.com/apis/credentials"
-          helpLinkText="Google Cloud Console"
-          placeholder="Paste your Google Maps API key…"
-          value={googleKey}
-          onChange={v => { setGoogleKey(v); setGoogleStatus("idle"); }}
-          onTest={testGoogleKey}
-          testing={googleTesting}
-          status={googleStatus}
-          testId="input-google-key"
-        />
-
-        <div className="border-t border-border" />
-
-        {/* Yelp key */}
-        <ApiKeyInput
-          label="Yelp Fusion API Key"
-          helpText="Adds photos, ratings, reviews, and price to results."
-          helpUrl="https://www.yelp.com/developers/v3/manage_app"
-          helpLinkText="yelp.com/developers"
-          placeholder="Paste your Yelp API key…"
-          value={yelpKey}
-          onChange={v => { setYelpKey(v); setYelpStatus("idle"); }}
-          onTest={testYelpKey}
-          testing={yelpTesting}
-          status={yelpStatus}
-          testId="input-yelp-key"
-        />
-
-        <div className="pt-2 border-t border-border">
-          <p className="text-xs text-muted-foreground">
-            Without API keys, YartedEats uses <strong>OpenStreetMap</strong> (free, no key needed).
-            OSM has addresses and hours, but no photos or star ratings.
-          </p>
-          <Button
-            variant="outline"
-            className="mt-3 w-full"
-            onClick={() => {
-              const didClear = clearSearchHistory();
-              toast(
-                didClear
-                  ? { title: "Past search history deleted", description: "Saved local history has been cleared." }
-                  : { title: "Could not delete history", description: "Browser storage is unavailable right now.", variant: "destructive" }
-              );
-            }}
-          >
-            Delete Past Search History
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Yelp API Key Prompt Modal ─────────────────────────────────────────────────
-function YelpApiPromptModal({
-  open, onSave, onSkip,
+  open,
+  onClose,
+  yelpKey,
+  googleKey,
+  setYelpKey,
+  setGoogleKey,
 }: {
   open: boolean;
-  onSave: (key: string) => void;
-  onSkip: () => void;
+  onClose: () => void;
+  yelpKey: string;
+  googleKey: string;
+  setYelpKey: (value: string) => void;
+  setGoogleKey: (value: string) => void;
 }) {
-  const [draftKey, setDraftKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [status, setStatus] = useState<"idle" | "valid" | "invalid">("idle");
-  const { toast } = useToast();
-
-  const handleTest = async () => {
-    if (!draftKey.trim()) return;
-    setTesting(true); setStatus("idle");
-    try {
-      const data = await validateYelpKey(draftKey.trim());
-      if (data.valid) {
-        setStatus("valid");
-      } else {
-        setStatus("invalid");
-        toast({ title: "Invalid Yelp key", description: data.error || "Check your key.", variant: "destructive" });
-      }
-    } catch { setStatus("invalid"); }
-    setTesting(false);
-  };
-
-  const handleSave = () => {
-    if (!draftKey.trim()) return;
-    onSave(draftKey.trim());
-  };
-
   if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <div className="relative bg-card border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
-        onClick={e => e.stopPropagation()}>
-        <div className="text-center space-y-1">
-          <div className="text-3xl mb-2">🍽️</div>
-          <h2 className="font-bold text-foreground text-lg">Welcome to YartedEats!</h2>
-          <p className="text-sm text-muted-foreground">
-            Enter your <strong>Yelp Fusion API key</strong> to unlock ratings, photos, and rich restaurant data.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Get a free key at{" "}
-            <a href="https://www.yelp.com/developers/v3/manage_app" target="_blank" rel="noopener noreferrer"
-              className="text-primary hover:underline font-medium">yelp.com/developers</a>.
-          </p>
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="settings-panel" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="eyebrow">Optional connections</p><h2>Bring your own keys</h2></div>
+          <button className="icon-button" onClick={onClose} aria-label="Close settings"><X /></button>
         </div>
-
-        <div className="space-y-2">
-          <div className="relative">
-            <Input
-              type={showKey ? "text" : "password"}
-              placeholder="Paste your Yelp API key…"
-              value={draftKey}
-              onChange={e => { setDraftKey(e.target.value); setStatus("idle"); }}
-              className="pr-9 bg-background font-mono text-xs"
-              data-testid="prompt-yelp-key"
-            />
-            <button onClick={() => setShowKey(v => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-
-          {status === "valid" && (
-            <p className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Key is valid
-            </p>
-          )}
-          {status === "invalid" && (
-            <p className="text-xs text-destructive font-semibold flex items-center gap-1">
-              <XCircle className="w-3.5 h-3.5" /> Invalid key — check and try again
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleTest}
-              disabled={testing || !draftKey.trim()} className="flex-1">
-              {testing ? "Testing…" : "Test Key"}
-            </Button>
-            <Button size="sm" onClick={handleSave}
-              disabled={!draftKey.trim()} className="flex-1">
-              Save & Use Yelp
-            </Button>
-          </div>
-        </div>
-
-        <div className="border-t border-border pt-3 text-center">
-          <button onClick={onSkip}
-            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
-            Skip — use OpenStreetMap (free, no key needed)
-          </button>
-        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          OpenStreetMap is always free. Keys stay in this browser and are only used when you choose a paid-data source.
+        </p>
+        <label className="field-label">Yelp Fusion API key<input type="password" value={yelpKey} onChange={(e) => setYelpKey(e.target.value)} placeholder="Optional" /></label>
+        <label className="field-label">Google Places API key<input type="password" value={googleKey} onChange={(e) => setGoogleKey(e.target.value)} placeholder="Optional" /></label>
+        <button className="button button-primary w-full" onClick={onClose}>Done</button>
       </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN PAGE
-// ═══════════════════════════════════════════════════════════════════════════════
 export default function Home() {
   const { theme, toggle } = useTheme();
-  const { toast } = useToast();
-  const [yelpKey, setYelpKey] = useState("");
-
-  // Filter state
-  const [city, setCity]             = useState("Dearborn, MI");
-  const [genre, setGenre]           = useState("middle_eastern");
-  const [diningStyle, setDining]    = useState("restaurants");
-  const [groupSize, setGroupSize]   = useState(2);
+  const [city, setCity] = useState("Dearborn, MI");
+  const [genre, setGenre] = useState("any");
+  const [diningStyle, setDiningStyle] = useState("restaurants");
+  const [groupSize, setGroupSize] = useState(2);
   const [priceRange, setPriceRange] = useState<string[]>([]);
-  const [halal, setHalal]           = useState(false);
-  const [openNow, setOpenNow]       = useState(false);
-  const [sortBy, setSortBy]         = useState("default");
-  const [userLat, setUserLat]       = useState<number | null>(null);
-  const [userLon, setUserLon]       = useState<number | null>(null);
-  const [locating, setLocating]     = useState(false);
-
-  // Data source
-  const [dataSource, setDataSource] = useState<"osm" | "yelp" | "google">("osm");
-  const [googleKey, setGoogleKey]   = useState("");
-  const [hasServerYelpKey, setHasServerYelpKey] = useState(false);
-  const [hasServerGoogleKey, setHasServerGoogleKey] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showApiKeyPrompt, setShowApiKeyPrompt] = useState(false);
-
-  // Results
-  const [results, setResults]         = useState<Restaurant[]>([]);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [errorMsg, setErrorMsg]       = useState("");
+  const [source, setSource] = useState<Source>("osm");
+  const [sort, setSort] = useState<Sort>("value");
+  const [halal, setHalal] = useState(false);
+  const [openNow, setOpenNow] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
-  const [checksPerSearch, setChecksPerSearch] = useState<number | null>(null);
-  const [searchEndpoint, setSearchEndpoint] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [yelpKey, setYelpKey] = useState("");
+  const [googleKey, setGoogleKey] = useState("");
+  const [results, setResults] = useState<Restaurant[]>([]);
+  const [searched, setSearched] = useState(false);
+  const [error, setError] = useState("");
+  const [checks, setChecks] = useState<number | null>(null);
+  const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationMessage, setLocationMessage] = useState("");
 
-  const togglePrice = (id: string) =>
-    setPriceRange(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
-
-  const handleLocate = useCallback(() => {
-    if (!navigator.geolocation) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      pos => { setUserLat(pos.coords.latitude); setUserLon(pos.coords.longitude); setLocating(false); },
-      () => setLocating(false),
-      { timeout: 8000 }
-    );
+  useEffect(() => {
+    setYelpKey(readStoredKey(KEY_STORAGE.yelp));
+    setGoogleKey(readStoredKey(KEY_STORAGE.google));
   }, []);
+  useEffect(() => { writeStoredKey(KEY_STORAGE.yelp, yelpKey); }, [yelpKey]);
+  useEffect(() => { writeStoredKey(KEY_STORAGE.google, googleKey); }, [googleKey]);
 
-  const searchMutation = useMutation({
-    mutationFn: async (): Promise<SearchResult> => {
-      setErrorMsg("");
-      return searchRestaurants({
-        city, genre, diningStyle, groupSize,
-        priceRange: priceRange.length ? priceRange.join(",") : "all",
-        halal, openNow, sortBy, userLat, userLon,
-        dataSource,
-        yelpApiKey: dataSource === "yelp" ? yelpKey.trim() : undefined,
-        googleApiKey: dataSource === "google" ? googleKey.trim() : undefined,
-      });
-    },
-    onSuccess: (data: SearchResult) => {
-      if (data.error) setErrorMsg(data.error);
+  const sortedResults = useMemo(() => [...results].sort((a, b) => {
+    if (sort === "value") {
+      const priceA = a.price ? a.price.length : 99;
+      const priceB = b.price ? b.price.length : 99;
+      return priceA - priceB || (b.rating || 0) - (a.rating || 0);
+    }
+    if (sort === "rating") return (b.rating || 0) - (a.rating || 0);
+    const distanceA = parseFloat(a.distance) || 99;
+    const distanceB = parseFloat(b.distance) || 99;
+    return distanceA - distanceB;
+  }), [results, sort]);
+
+  const search = useMutation({
+    mutationFn: (): Promise<SearchResult> => searchRestaurants({
+      city, genre, diningStyle, groupSize,
+      priceRange: priceRange.length ? priceRange.join(",") : "all",
+      halal, openNow, sortBy: sort, dataSource: source,
+      userLat: location?.lat,
+      userLon: location?.lon,
+      yelpApiKey: source === "yelp" ? yelpKey : undefined,
+      googleApiKey: source === "google" ? googleKey : undefined,
+    }),
+    onSuccess: (data) => {
       setResults(data.results || []);
-      setChecksPerSearch(typeof data.checksPerSearch === "number" ? data.checksPerSearch : null);
-      setSearchEndpoint(data.endpoint || "");
-      setHasSearched(true);
+      setError(data.error || "");
+      setChecks(typeof data.checksPerSearch === "number" ? data.checksPerSearch : null);
+      setSearched(true);
       setShowFilters(false);
     },
-    onError: () => {
-      setErrorMsg("Connection error. Please try again.");
-      setChecksPerSearch(null);
-      setSearchEndpoint("");
-      setHasSearched(true);
-    },
+    onError: () => { setError("We could not reach the food sources. Try again in a moment."); setSearched(true); },
   });
 
-  const selectedGenre  = CUISINE_GENRES.find(g => g.id === genre);
-  const selectedDining = DINING_STYLES.find(d => d.id === diningStyle);
-
-  useEffect(() => {
-    let mounted = true;
-    let savedYelpKey = "";
-    try {
-      savedYelpKey = (localStorage.getItem(YELP_KEY_STORAGE_KEY) || "").trim();
-      if (savedYelpKey) {
-        setYelpKey(savedYelpKey);
-        setDataSource("yelp");
-      } else {
-        setShowApiKeyPrompt(true);
-      }
-    } catch (error) {
-      console.warn("Could not load saved Yelp key from localStorage.", error);
-      setShowApiKeyPrompt(true);
+  const runSearch = () => search.mutate();
+  const togglePrice = (id: string) => setPriceRange((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationMessage("Location is not available in this browser.");
+      return;
     }
-
-    getServerKeyStatus().then((status) => {
-      if (!mounted) return;
-      const serverYelp = Boolean(status?.yelpConfigured);
-      const serverGoogle = Boolean(status?.googleConfigured);
-      setHasServerYelpKey(serverYelp);
-      setHasServerGoogleKey(serverGoogle);
-      // If the server already has a Yelp key and the user hasn't saved a local key,
-      // dismiss the prompt and switch to Yelp automatically.
-      if (serverYelp && !savedYelpKey) {
-        setShowApiKeyPrompt(false);
-        setDataSource("yelp");
-      }
-    });
-    return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
-    try {
-      if (yelpKey.trim()) localStorage.setItem(YELP_KEY_STORAGE_KEY, yelpKey.trim());
-      else localStorage.removeItem(YELP_KEY_STORAGE_KEY);
-    } catch (error) {
-      console.warn("Could not persist Yelp key to localStorage.", error);
-    }
-  }, [yelpKey]);
+    setLocating(true);
+    setLocationMessage("");
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setLocation({ lat: coords.latitude, lon: coords.longitude });
+        setLocationMessage("Using your location for distance sorting.");
+        setLocating(false);
+      },
+      () => {
+        setLocationMessage("Location permission was denied; using the city center.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-background">
-
-      {/* Yelp API key prompt shown on first visit */}
-      <YelpApiPromptModal
-        open={showApiKeyPrompt}
-        onSave={(key) => {
-          setYelpKey(key);
-          setDataSource("yelp");
-          setShowApiKeyPrompt(false);
-          toast({ title: "Yelp key saved", description: "Searching with Yelp data." });
-        }}
-        onSkip={() => setShowApiKeyPrompt(false)}
-      />
-
-      {/* Settings modal */}
-      <SettingsPanel open={showSettings} onClose={() => setShowSettings(false)}
-        yelpKey={yelpKey} setYelpKey={setYelpKey}
-        googleKey={googleKey} setGoogleKey={setGoogleKey} />
-
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-label="YartedEats logo">
-              <rect width="34" height="34" rx="9" fill="hsl(214 45% 34%)"/>
-              <path d="M17 6 L22 14 L30 15.5 L24 21.5 L25.5 30 L17 25.5 L8.5 30 L10 21.5 L4 15.5 L12 14 Z" stroke="white" strokeWidth="1.5" fill="none" opacity="0.5"/>
-              <circle cx="17" cy="17" r="6" fill="white" opacity="0.15"/>
-              <path d="M13 17 Q15 14 17 17 Q19 20 21 17" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none"/>
-              <circle cx="17" cy="22" r="2" fill="white" opacity="0.8"/>
-            </svg>
-            <div className="brand-font leading-none">
-              <span className="text-foreground text-base font-bold">Yarted</span>
-              <span className="text-primary text-base font-bold">Eats</span>
-              <span className="text-muted-foreground text-xs font-medium ml-1.5">by Ali</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {hasSearched && (
-              <button onClick={() => setShowFilters(f => !f)} data-testid="button-toggle-filters"
-                className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-lg hover:bg-secondary transition-colors">
-                <Filter className="w-3.5 h-3.5" />{showFilters ? "Hide" : "Filters"}
-              </button>
-            )}
-            <button onClick={() => setShowSettings(true)} data-testid="button-settings"
-              className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              title="Settings — API Keys">
-              <Settings className="w-4 h-4" />
-            </button>
-            <span className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-              <MapPin className="w-3.5 h-3.5 text-primary" />Metro Detroit
-            </span>
-            <button onClick={toggle} data-testid="button-theme-toggle"
-              className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-          </div>
+    <div className="app-shell">
+      <header className="topbar">
+        <a href="#" className="brand"><span className="brand-mark"><Utensils /></span><span>fork<span className="brand-accent">finder</span></span></a>
+        <div className="topbar-actions">
+          <span className="hidden text-xs font-semibold text-muted-foreground sm:inline">Metro Detroit food scout</span>
+          <button className="icon-button" onClick={toggle} aria-label="Toggle color theme">{theme === "dark" ? <Sun /> : <Moon />}</button>
+          <button className="button button-ghost" onClick={() => setSettingsOpen(true)}><Settings2 /> <span className="hidden sm:inline">Sources</span></button>
         </div>
       </header>
 
-      {/* ── Hero ──────────────────────────────────────────────────────────────── */}
-      <div className="hero-bg text-white px-4 py-10 md:py-12">
-        <div className="max-w-3xl mx-auto text-center">
-          <h1 className="brand-font text-3xl md:text-4xl font-extrabold mb-2 leading-tight">
-            Find Your Next Meal<br />in Metro Detroit
-          </h1>
-          <p className="text-white/75 text-sm">
-            Dine In · Pick Up · Food Trucks · Halal · <strong>OpenStreetMap</strong> · <strong>Yelp</strong> · <strong>Google Maps</strong>
-          </p>
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
-
-        {/* ── Filter Panel ─────────────────────────────────────────────────── */}
-        {showFilters && (
-          <div className="bg-card border border-border rounded-2xl p-5 md:p-6 space-y-5 shadow-sm">
-
-            {/* Data Source Toggle */}
-            <div>
-              <FilterLabel><Database className="w-3 h-3 inline mr-1" />Data Source</FilterLabel>
-              <div className="flex gap-2 flex-wrap">
-                <button data-testid="chip-source-osm" onClick={() => setDataSource("osm")}
-                  className={`chip ${dataSource === "osm" ? "active-accent" : ""}`}>
-                  <Database className="w-3.5 h-3.5" /> OpenStreetMap
-                  <span className="text-[10px] opacity-70 font-medium ml-1">(free)</span>
-                </button>
-                <button data-testid="chip-source-yelp" onClick={() => {
-                  if (!yelpKey.trim()) {
-                    setShowApiKeyPrompt(true);
-                    return;
-                  }
-                  setDataSource("yelp");
-                }}
-                  className={`chip ${dataSource === "yelp" ? "active-yelp" : ""}`}>
-                  <Zap className="w-3.5 h-3.5" /> Yelp
-                  {yelpKey.trim()
-                    ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
-                    : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
-                  }
-                </button>
-                <button data-testid="chip-source-google" onClick={() => {
-                  if (!googleKey.trim() && !hasServerGoogleKey) { setShowSettings(true); return; }
-                  setDataSource("google");
-                }}
-                  className={`chip ${dataSource === "google" ? "active-google" : ""}`}>
-                  <MapPin className="w-3.5 h-3.5" /> Google Maps
-                  {(googleKey.trim() || hasServerGoogleKey)
-                    ? <span className="text-[10px] font-medium ml-1 opacity-70">key set ✓</span>
-                    : <span className="text-[10px] font-medium ml-1 opacity-50">needs key</span>
-                  }
-                </button>
-              </div>
-            </div>
-
-            {/* City + Group Size */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <FilterLabel><MapPin className="w-3 h-3 inline mr-1" />City / Neighborhood</FilterLabel>
-                <Select value={city} onValueChange={setCity}>
-                  <SelectTrigger data-testid="select-city" className="bg-background"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {METRO_DETROIT_CITIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <FilterLabel>
-                  <Users className="w-3 h-3 inline mr-1" />
-                  Group Size — <span className="text-primary normal-case">{groupSize} {groupSize === 1 ? "person" : "people"}</span>
-                </FilterLabel>
-                <div className="flex items-center gap-3 mt-2">
-                  <button onClick={() => setGroupSize(s => Math.max(1, s - 1))} data-testid="btn-dec"
-                    className="w-8 h-8 rounded-full bg-secondary hover:bg-primary hover:text-white transition-colors flex items-center justify-center font-bold text-lg">−</button>
-                  <Slider value={[groupSize]} min={1} max={20} step={1} onValueChange={([v]) => setGroupSize(v)} className="flex-1" />
-                  <button onClick={() => setGroupSize(s => Math.min(20, s + 1))} data-testid="btn-inc"
-                    className="w-8 h-8 rounded-full bg-secondary hover:bg-primary hover:text-white transition-colors flex items-center justify-center font-bold text-lg">+</button>
-                </div>
-              </div>
-            </div>
-
-            {/* Dining Style */}
-            <div>
-              <FilterLabel>Dining Style</FilterLabel>
-              <div className="flex flex-wrap gap-2">
-                {DINING_STYLES.map(d => (
-                  <button key={d.id} data-testid={`chip-dining-${d.id}`} onClick={() => setDining(d.id)}
-                    className={`chip ${diningStyle === d.id ? "active-accent" : ""}`}>
-                    <span className="text-base">{d.icon}</span>{d.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Cuisine */}
-            <div>
-              <FilterLabel>Cuisine Genre</FilterLabel>
-              <div className="flex flex-wrap gap-2">
-                {CUISINE_GENRES.map(g => (
-                  <button key={g.id} data-testid={`chip-genre-${g.id}`} onClick={() => setGenre(g.id)}
-                    className={`chip ${genre === g.id ? "active-primary" : ""}`}>
-                    <span>{g.icon}</span>{g.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Price + Sort + Toggles */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-end flex-wrap">
-              <div>
-                <FilterLabel>Price Range</FilterLabel>
-                <div className="flex gap-2">
-                  {PRICE_RANGES.map(p => (
-                    <button key={p.id} title={p.desc} data-testid={`chip-price-${p.id}`}
-                      onClick={() => togglePrice(p.id)}
-                      className={`chip px-4 font-bold ${priceRange.includes(p.id) ? "active-dark" : ""}`}>{p.label}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <FilterLabel>Sort By</FilterLabel>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger data-testid="select-sort" className="bg-background w-36">
-                    <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 opacity-60" /><SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Default</SelectItem>
-                    {SORT_OPTIONS.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <button data-testid="button-halal" onClick={() => setHalal(h => !h)}
-                className={`chip halal-chip ${halal ? "on" : "off"}`}>
-                <span className="text-base">☪️</span>Halal Only
-                {halal ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4 opacity-35" />}
-              </button>
-
-              <button data-testid="button-open-now" onClick={() => setOpenNow(o => !o)}
-                className={`chip open-chip ${openNow ? "on" : ""}`}>
-                <Clock className="w-4 h-4" />Open Now
-                {openNow ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4 opacity-35" />}
-              </button>
-
-              <button data-testid="button-near-me" onClick={handleLocate}
-                className={`chip ${userLat ? "active-accent" : ""} ${locating ? "opacity-60" : ""}`} disabled={locating}>
-                <Navigation className="w-4 h-4" />
-                {locating ? "Locating…" : userLat ? "Located ✓" : "Near Me"}
-              </button>
-            </div>
-
-            {/* Search CTA */}
-            <Button data-testid="button-search" onClick={() => searchMutation.mutate()}
-              disabled={searchMutation.isPending}
-              className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" size="lg">
-              {searchMutation.isPending ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Searching {dataSource === "google" ? "Google Maps" : dataSource === "yelp" ? "Yelp" : "OpenStreetMap"}…
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <Search className="w-4.5 h-4.5" />
-                  Find {selectedDining?.icon} {selectedDining?.label} · {selectedGenre?.icon} {selectedGenre?.label}
-                  {halal && " · ☪️ Halal"}
-                  {openNow && " · Open Now"}
-                  <span className="opacity-60 ml-1 text-xs">via {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : "OSM"}</span>
-                </span>
-              )}
-            </Button>
+      <main>
+        <section className="hero-section">
+          <div className="hero-copy">
+            <p className="eyebrow hero-eyebrow"><Sparkles /> Find the good stuff for less</p>
+            <h1>Great food,<br /><em>without the guesswork.</em></h1>
+            <p className="hero-subtitle">Search independent spots, fast bites, and hidden gems across Metro Detroit — ranked around what matters most to you.</p>
           </div>
-        )}
+          <div className="hero-orbit"><span>🍜</span><span>🥙</span><span>🍕</span><span>🌮</span></div>
+        </section>
 
-        {/* Edit Filters */}
-        {!showFilters && (
-          <button onClick={() => setShowFilters(true)}
-            className="w-full py-3 rounded-xl border border-border bg-card text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center justify-center gap-2">
-            <Filter className="w-4 h-4" /> Edit Filters
-          </button>
-        )}
-
-        {/* Error */}
-        {errorMsg && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/8 px-4 py-3 text-sm text-destructive font-medium">
-            ⚠️ {errorMsg}
+        <section className="search-board">
+          <div className="search-board__top">
+            <div><p className="eyebrow">Start exploring</p><h2>What are you craving?</h2></div>
+            <button className="filter-toggle" onClick={() => setShowFilters(!showFilters)}><Filter /> {showFilters ? "Hide filters" : "Show filters"} <ChevronDown className={showFilters ? "rotate-180" : ""} /></button>
           </div>
-        )}
-
-        {/* Loading */}
-        {searchMutation.isPending && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array(6).fill(0).map((_, i) => <SkeletonCard key={i} />)}
+          <div className="quick-search">
+            <label className="search-field"><MapPin /><select value={city} onChange={(e) => setCity(e.target.value)}>{METRO_DETROIT_CITIES.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown /></label>
+            <label className="search-field"><Utensils /><select value={genre} onChange={(e) => setGenre(e.target.value)}>{CUISINE_GENRES.map((item) => <option key={item.id} value={item.id}>{item.icon} {item.label}</option>)}</select><ChevronDown /></label>
+            <button className="button button-primary search-button" onClick={runSearch} disabled={search.isPending}><Search /> {search.isPending ? "Searching…" : "Search food"}</button>
           </div>
-        )}
+          {showFilters && <div className="filter-grid">
+            <div><p className="filter-label">How do you want it?</p><div className="chip-row">{DINING_STYLES.map((item) => <button key={item.id} className={`filter-chip ${diningStyle === item.id ? "selected" : ""}`} onClick={() => setDiningStyle(item.id)}>{item.icon} {item.label}</button>)}</div></div>
+            <div><p className="filter-label">Budget</p><div className="chip-row">{PRICE_RANGES.map((item) => <button key={item.id} className={`filter-chip ${priceRange.includes(item.id) ? "selected" : ""}`} onClick={() => togglePrice(item.id)} title={item.desc}>{item.label}</button>)}</div></div>
+            <div className="filter-grid__toggles"><button className={`toggle-chip ${halal ? "selected" : ""}`} onClick={() => setHalal(!halal)}>☪ Halal friendly</button><button className={`toggle-chip ${openNow ? "selected" : ""}`} onClick={() => setOpenNow(!openNow)}><Clock3 /> Open now</button><label className="group-size"><span>Party</span><select value={groupSize} onChange={(e) => setGroupSize(Number(e.target.value))}><option value={1}>1 person</option><option value={2}>2 people</option><option value={4}>4 people</option><option value={6}>6+ people</option><option value={10}>10+ people</option></select></label></div>
+          </div>}
+          <div className="source-row"><span className="filter-label">Search source</span>{(["osm", "yelp", "google"] as Source[]).map((item) => <button key={item} className={`source-select ${source === item ? "selected" : ""}`} onClick={() => setSource(item)}><SourcePill source={item} /></button>)}<button className="location-button" onClick={useMyLocation} disabled={locating}><Navigation /> {locating ? "Locating…" : location ? "Location on" : "Use my location"}</button><span className="source-note">{locationMessage || "OSM is free and needs no key"}</span></div>
+        </section>
 
-        {/* Results */}
-        {!searchMutation.isPending && hasSearched && results.length > 0 && (
-          <>
-            <div className="flex flex-wrap items-center gap-2 justify-between">
-              <h2 className="font-bold text-foreground text-lg">
-                {results.length} spots
-                <span className="text-muted-foreground font-normal text-sm ml-2">in {city}</span>
-              </h2>
-              <div className="flex flex-wrap gap-1.5 text-xs items-center">
-                {halal && <span style={{ background: "hsl(var(--halal-bg))", color: "hsl(var(--halal-text))" }} className="px-2.5 py-1 rounded-full font-semibold">☪️ Halal</span>}
-                {openNow && <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2.5 py-1 rounded-full font-semibold">🟢 Open Now</span>}
-                <span className="bg-secondary text-foreground px-2.5 py-1 rounded-full font-semibold">{selectedDining?.icon} {selectedDining?.label}</span>
-                <span className="bg-secondary text-foreground px-2.5 py-1 rounded-full font-semibold">{selectedGenre?.icon} {selectedGenre?.label}</span>
-                <span className={`px-2.5 py-1 rounded-full font-semibold ${dataSource === "google" ? "google-badge" : dataSource === "yelp" ? "yelp-badge" : "osm-badge"}`}>
-                  {dataSource === "google" ? "Google" : dataSource === "yelp" ? "Yelp" : "OSM"}
-                </span>
-                {dataSource === "osm" && checksPerSearch !== null && (
-                  <span className="text-muted-foreground">
-                    {checksPerSearch} OSM endpoint check{checksPerSearch === 1 ? "" : "s"}
-                    {searchEndpoint ? ` (${searchEndpoint.replace(/^https?:\/\//, "").split("/")[0]})` : ""}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {results.map(r => <RestaurantCard key={r.id} r={r} />)}
-            </div>
-          </>
-        )}
-
-        {/* Empty */}
-        {!searchMutation.isPending && hasSearched && results.length === 0 && !errorMsg && (
-          <div className="text-center py-16">
-            <div className="text-5xl mb-3">🔍</div>
-            <p className="font-semibold text-foreground">No results found</p>
-            <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-              {dataSource === "yelp"
-                ? "Try a different genre, city, or switch to another data source."
-                : 'Try a different genre, city, or data source.'}
-            </p>
-            {dataSource === "osm" && checksPerSearch !== null && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Search used {checksPerSearch} OSM endpoint check{checksPerSearch === 1 ? "" : "s"}
-                {searchEndpoint ? ` (${searchEndpoint.replace(/^https?:\/\//, "").split("/")[0]})` : ""}.
-              </p>
-            )}
+        <section className="results-section">
+          <div className="results-heading">
+            <div><p className="eyebrow">{searched ? "Your shortlist" : "Built for Metro Detroit"}</p><h2>{searched ? `${results.length} places worth a look` : "Start with a neighborhood"}</h2></div>
+            <div className="results-controls">{searched && <span className="results-location"><MapPin /> {city}</span>}<label className="sort-select"><span>Sort</span><select value={sort} onChange={(e) => setSort(e.target.value as Sort)}><option value="value">Best value</option><option value="rating">Top rated</option><option value="distance">Closest</option></select></label></div>
           </div>
-        )}
-
-        {/* Idle */}
-        {!hasSearched && !searchMutation.isPending && (
-          <div className="text-center py-14 text-muted-foreground">
-            <div className="text-6xl mb-4">🍽️</div>
-            <p className="font-bold text-foreground text-lg brand-font">Ready to eat?</p>
-            <p className="text-sm mt-1">Set your filters and hit <strong>Find</strong> to discover real spots in Metro Detroit</p>
-          </div>
-        )}
-      </div>
-
-      {/* Footer */}
-      <footer className="border-t border-border mt-12 px-4 py-6 text-center text-xs text-muted-foreground space-y-1">
-        <p className="brand-font font-bold text-sm text-foreground">YartedEats by Ali 🚗</p>
-        <p>
-          Data from{" "}
-          <a href="https://www.openstreetmap.org" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenStreetMap</a>
-          {" · "}
-          <a href="https://www.yelp.com/developers" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#d32323" }}>Yelp</a>
-          {" · "}
-          <a href="https://developers.google.com/maps" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: "#4285f4" }}>Google Maps</a>
-        </p>
-      </footer>
+          {search.isPending && <div className="loading-state"><div className="loading-spinner" /><p>Checking menus and local listings around {city}…</p></div>}
+          {!search.isPending && error && <div className="error-state"><p>{error}</p><button className="button button-secondary" onClick={runSearch}>Try again</button></div>}
+          {!search.isPending && !error && searched && results.length === 0 && <div className="empty-state"><Compass /><h3>No matches yet</h3><p>Try a wider cuisine, another neighborhood, or remove a filter.</p></div>}
+          {!search.isPending && !error && sortedResults.length > 0 && <div className="results-grid">{sortedResults.map((restaurant) => <RestaurantCard key={`${restaurant.source}-${restaurant.id}`} restaurant={restaurant} />)}</div>}
+          {!search.isPending && !searched && <div className="welcome-grid"><div><span>01</span><h3>Pick a place</h3><p>Search Canton, Ann Arbor, Detroit, Dearborn, and more.</p></div><div><span>02</span><h3>Set your budget</h3><p>Keep the search focused on meals that fit your day.</p></div><div><span>03</span><h3>Compare sources</h3><p>Start free with OSM, then add richer listings when you need them.</p></div></div>}
+          {checks !== null && <p className="source-footnote">OpenStreetMap checked {checks.toLocaleString()} map features for this search.</p>}
+        </section>
+      </main>
+      <footer className="site-footer"><span>Made for hungry people in Metro Detroit.</span><span>Data from public sources · Always verify hours and pricing before heading out.</span></footer>
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} yelpKey={yelpKey} googleKey={googleKey} setYelpKey={setYelpKey} setGoogleKey={setGoogleKey} />
     </div>
   );
 }
